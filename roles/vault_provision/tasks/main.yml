@@ -1,0 +1,44 @@
+---
+
+- name: Basic provision of vault host
+  become: true
+  block:
+    - name: Register subscription for host with Red Hat
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ vault_provision_redhat_username }}"
+        password: "{{ vault_provision_redhat_password }}"
+        auto_attach: true
+      when: vault_provision_redhat_subscription
+
+    - name: Update all packages on system to current
+      ansible.builtin.package:
+        disablerepo: '*'
+        enablerepo: "{{ vault_provision_rhel_repos }}"
+        name: '*'
+        state: latest
+      when: vault_provision_rhel_update
+
+    - name: Install EPEL repo gpg key
+      ansible.builtin.rpm_key:
+        key: "{{ vault_provision_epel_gpg_key_url }}"
+        state: present
+
+    - name: Install EPEL repo package
+      ansible.builtin.dnf:
+        name: "{{ vault_provision_epel_rpm_url }}"
+        state: present
+
+    - name: Configure EPEL includepkgs
+      ansible.builtin.lineinfile:
+        path: /etc/yum.repos.d/epel.repo
+        line: 'includepkgs = {{ vault_provision_epel_packages | join(" ") }}'
+        regexp: '^includepkgs\s+='
+        insertafter: '^\[epel\]'
+
+    - name: Install package dependencies
+      ansible.builtin.dnf:
+        name: "{{ vault_provision_rhel_packages + vault_provision_epel_packages }}"
+        state: present
+
+...

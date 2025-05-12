@@ -1,0 +1,106 @@
+---
+- name: Provision aap for AAP-HashiCorp integrated demo
+  hosts: "{{ groups['aap_hashi_aap'][0] }}"
+  tags: aap
+
+  roles:
+    - name: aap_provision
+    - name: aap_install
+
+- name: Run installation for aap
+  hosts: "{{ groups['aap_hashi_aap'][0] }}"
+  tags: aap
+
+  vars:
+    ansible_user: "{{ aap_user }}"
+    installer_extracted: "{{ aap_installer | regex_replace('\\.tar.gz$', '') }}"
+
+  tasks:
+
+    - name: Run the AAP installer
+      tags: aap_install
+      block:
+
+        - name: Run the Ansible Automation Platform setup program
+          ansible.builtin.shell: "ansible-playbook -i inventory ansible.containerized_installer.install"
+          args:
+            chdir: "{{ aap_dir }}/{{ installer_extracted }}"
+          async: 10000
+          poll: 20
+          changed_when: false
+
+        - name: Wait for automation controller to be running
+          ansible.builtin.uri: # use the first host from the list if no hostname is defined
+            url: https://{{ inventory_hostname }}:443/
+            method: GET
+            user: admin
+            password: "{{ aap_install_common_password }}"
+            force_basic_auth: true
+            status_code: 200
+            validate_certs: "{{ aap_validate_certs | default(omit) }}"
+          register: __aap_setup_inst_result
+          until: __aap_setup_inst_result.status == 200
+          retries: 90
+          delay: 10
+
+    - name: Add a subscription to the AAP host
+      when: aap_provision_redhat_subscription | default(false)
+      block:
+
+        - name: Upload the subscription manifest to the aap host
+          ansible.builtin.copy:
+            src: "{{ aap.license }}"
+            dest: "{{ aap_dir }}/aap-license.zip"
+            mode: '0644'
+          when: aap_provision_redhat_manifest | default(false)
+
+        - name: Use online subscription attachement
+          when: not aap_provision_redhat_manifest | default(false)
+          block:
+
+            - name: Use the subscriptions module to fetch subscriptions from Red Hat or Red Hat Satellite
+              ansible.controller.subscriptions:
+                controller_host: "{{ inventory_hostname }}"
+                controller_username: admin
+                controller_password: "{{ aap_install_common_password }}"
+                username: "{{ aap_provision_redhat_username }}"
+                password: "{{ aap_provision_redhat_password }}"
+              
+
+            - name: Install the subscription with a pool ID
+              ansible.controller.license:
+                controller_host: "{{ inventory_hostname }}"
+                controller_username: admin
+                controller_password: "{{ aap_install_common_password }}"
+                pool_id: "{{ aap_provision_redhat_pool }}"
+
+    # - name: Wait for automation hub to be running
+    #   ansible.builtin.uri: # use the first host from the list if no hostname is defined
+    #     url: https://{{ ah_hostname }}:{{ __aap_setup_inst_hub_port }}/api/galaxy/
+    #     method: GET
+    #     user: admin
+    #     password: "{{ aap_setup_prep_inv_secrets.all.hub_admin_password | default(aap_setup_prep_inv_vars.all.hub_admin_password) }}"
+    #     force_basic_auth: true
+    #     status_code: 200
+    #     validate_certs: "{{ ah_validate_certs | default(omit) }}"
+    #   register: __aap_setup_inst_result_ah
+    #   until: __aap_setup_inst_result_ah.status == 200
+    #   retries: 90
+    #   delay: 10
+    #   when: "'automationhub' in aap_setup_prep_inv_nodes"
+
+    # - name: Wait for EDA controller to be running
+    #   ansible.builtin.uri: # use the first host from the list if no hostname is defined
+    #     url: https://{{ eda_hostname }}:{{ __aap_setup_inst_eda_port }}/
+    #     method: GET
+    #     user: admin
+    #     password: "{{ aap_setup_prep_inv_secrets.all.eda_admin_password | default(aap_setup_prep_inv_vars.all.eda_admin_password) }}"
+    #     validate_certs: "{{ eda_validate_certs | default('false') }}"
+    #     force_basic_auth: true
+    #   register: __aap_setup_inst_result_eda
+    #   until: __aap_setup_inst_result_eda.status == 200
+    #   retries: 90
+    #   delay: 10
+    #   when: "'automationeda' in aap_setup_prep_inv_nodes"
+
+...

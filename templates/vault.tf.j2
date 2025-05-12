@@ -1,0 +1,225 @@
+provider "vault" {
+  address = "{{ _vault_url }}"
+  token = "{{ root_token_result.stdout }}"
+  skip_tls_verify = true
+}
+
+# create root CA
+resource "vault_mount" "pki" {
+  path        = "pki"
+  type        = "pki"
+  description = "This is the root CA"
+
+  default_lease_ttl_seconds = 86400
+  max_lease_ttl_seconds     = 30960000
+}
+
+# create root CA certificate
+
+resource "vault_pki_secret_backend_root_cert" "root_2025" {
+  backend     = vault_mount.pki.path
+  type        = "internal"
+  common_name = "{{ aws_domain }}"
+  ttl         = 315360000
+  issuer_name = "root-2025"
+}
+
+output "vault_pki_secret_backend_root_cert_root_2025" {
+  value = vault_pki_secret_backend_root_cert.root_2025.certificate
+}
+
+resource "local_file" "root_2025_cert" {
+  content  = vault_pki_secret_backend_root_cert.root_2025.certificate
+  filename = "root_2025_ca.crt"
+}
+
+# used to update name and properties
+# manages lifecycle of existing issuer
+resource "vault_pki_secret_backend_issuer" "root_2025" {
+  backend                        = vault_mount.pki.path
+  issuer_ref                     = vault_pki_secret_backend_root_cert.root_2025.issuer_id
+  issuer_name                    = vault_pki_secret_backend_root_cert.root_2025.issuer_name
+  revocation_signature_algorithm = "SHA256WithRSA"
+}
+
+# configure root CA role
+
+resource "vault_pki_secret_backend_role" "role" {
+  backend          = vault_mount.pki.path
+  name             = "2025-servers-role"
+  allow_ip_sans    = true
+  key_type         = "rsa"
+  key_bits         = 4096
+  allow_subdomains = true
+  allow_any_name   = true
+}
+
+# configure CA and CRL URLs
+resource "vault_pki_secret_backend_config_urls" "config-urls" {
+  backend                 = vault_mount.pki.path
+  issuing_certificates    = ["{{ _vault_url }}/v1/pki/ca"]
+  crl_distribution_points = ["{{ _vault_url }}/v1/pki/crl"]
+}
+
+# enable and tune the PKI secrets engine
+
+resource "vault_mount" "pki_int" {
+  path        = "pki_int"
+  type        = "pki"
+  description = "{{ aws_domain }} Intermediate Authority"
+
+  default_lease_ttl_seconds = 86400
+  max_lease_ttl_seconds     = 30960000
+}
+
+#  generate intermediate and save csr
+
+resource "vault_pki_secret_backend_intermediate_cert_request" "csr-request" {
+  backend     = vault_mount.pki_int.path
+  type        = "internal"
+  common_name = "{{ aws_domain }} Intermediate Authority"
+}
+
+resource "local_file" "csr_request_cert" {
+  content  = vault_pki_secret_backend_intermediate_cert_request.csr-request.csr
+  filename = "pki_intermediate.csr"
+}
+
+# sign and save the cert
+
+resource "vault_pki_secret_backend_root_sign_intermediate" "intermediate" {
+  backend     = vault_mount.pki.path
+  common_name = "new_intermediate"
+  csr         = vault_pki_secret_backend_intermediate_cert_request.csr-request.csr
+  format      = "pem_bundle"
+  ttl         = 30960000
+  issuer_ref  = vault_pki_secret_backend_root_cert.root_2025.issuer_id
+}
+
+resource "local_file" "intermediate_ca_cert" {
+  content  = vault_pki_secret_backend_root_sign_intermediate.intermediate.certificate
+  filename = "intermediate.cert.pem"
+}
+
+# import the cert to vault
+
+resource "vault_pki_secret_backend_intermediate_set_signed" "intermediate" {
+  backend     = vault_mount.pki_int.path
+  certificate = vault_pki_secret_backend_root_sign_intermediate.intermediate.certificate
+}
+
+# manage the issuer created for the set signed
+resource "vault_pki_secret_backend_issuer" "intermediate" {
+  backend     = vault_mount.pki_int.path
+  issuer_ref  = vault_pki_secret_backend_intermediate_set_signed.intermediate.imported_issuers[0]
+  issuer_name = "{{ aws_domain | replace(".", "-") }}-intermediate"
+}
+
+# configure intermediate CA role
+
+resource "vault_pki_secret_backend_role" "intermediate_role" {
+  backend          = vault_mount.pki_int.path
+  issuer_ref       = vault_pki_secret_backend_issuer.intermediate.issuer_ref
+  name             = "{{ aws_domain | replace(".", "-") }}"
+  ttl              = 86400
+  max_ttl          = 30960000
+  allow_ip_sans    = true
+  key_type         = "rsa"
+  key_bits         = 4096
+  allowed_domains  = ["{{ aws_domain }}"]
+  allow_subdomains = true
+  allowed_other_sans = ["*"]
+#  allowed_other_sans = ["otherName:1.3.6.1.4.1.2312.19.1;UTF-8:*"]
+
+#  policy_identifier {
+#    oid = "1.3.6.1.4.1.2312.19.1"
+#    cps ="https://redhat.com"
+#  }
+
+}
+
+#  request new certs for URL
+#  vault write pki_int/issue/{{ aws_domain | replace(".", "-") }} common_name="gitlab.{{ aws_domain }}" ttl="24h"
+
+resource "vault_pki_secret_backend_cert" "gitlab_{{ aws_domain | replace(".", "_") }}" {
+  issuer_ref  = vault_pki_secret_backend_issuer.intermediate.issuer_ref
+  backend     = vault_pki_secret_backend_role.intermediate_role.backend
+  name        = vault_pki_secret_backend_role.intermediate_role.name
+  common_name = "gitlab.{{ aws_domain }}"
+  ttl         = 15480000
+  revoke     = true
+}
+
+output "vault_pki_secret_backend_cert_gitlab_{{ aws_domain | replace(".", "_") }}_cert" {
+  value = vault_pki_secret_backend_cert.gitlab_{{ aws_domain | replace(".", "_") }}.certificate
+}
+
+output "vault_pki_secret_backend_cert_gitlab_{{ aws_domain | replace(".", "_") }}_serial_number" {
+  value = vault_pki_secret_backend_cert.gitlab_{{ aws_domain | replace(".", "_") }}.serial_number
+}
+
+output "vault_pki_secret_backend_cert_gitlab_{{ aws_domain | replace(".", "_") }}_ca_chain" {
+  value = vault_pki_secret_backend_cert.gitlab_{{ aws_domain | replace(".", "_") }}.ca_chain
+}
+
+output "vault_pki_secret_backend_cert_gitlab_{{ aws_domain | replace(".", "_") }}_private_key" {
+  value = vault_pki_secret_backend_cert.gitlab_{{ aws_domain | replace(".", "_") }}.private_key
+  sensitive = true
+}
+
+#  vault write pki_int/issue/{{ aws_domain | replace(".", "-") }} common_name="aap.{{ aws_domain }}" ttl="24h"
+
+resource "vault_pki_secret_backend_cert" "aap_{{ aws_domain | replace(".", "_") }}" {
+  issuer_ref  = vault_pki_secret_backend_issuer.intermediate.issuer_ref
+  backend     = vault_pki_secret_backend_role.intermediate_role.backend
+  name        = vault_pki_secret_backend_role.intermediate_role.name
+  common_name = "aap.{{ aws_domain }}"
+  alt_names   = ["otherName:1.3.6.1.4.1.2312.19.1;UTF-8:redhat.com"]
+  ttl         = 15480000
+  revoke      = true
+}
+
+output "vault_pki_secret_backend_cert_aap_{{ aws_domain | replace(".", "_") }}_cert" {
+  value = vault_pki_secret_backend_cert.aap_{{ aws_domain | replace(".", "_") }}.certificate
+}
+
+output "vault_pki_secret_backend_cert_aap_{{ aws_domain | replace(".", "_") }}_serial_number" {
+  value = vault_pki_secret_backend_cert.aap_{{ aws_domain | replace(".", "_") }}.serial_number
+}
+
+output "vault_pki_secret_backend_cert_aap_{{ aws_domain | replace(".", "_") }}_ca_chain" {
+  value = vault_pki_secret_backend_cert.aap_{{ aws_domain | replace(".", "_") }}.ca_chain
+}
+
+output "vault_pki_secret_backend_cert_aap_{{ aws_domain | replace(".", "_") }}_private_key" {
+  value = vault_pki_secret_backend_cert.aap_{{ aws_domain | replace(".", "_") }}.private_key
+  sensitive = true
+}
+
+#  vault write pki_int/issue/{{ aws_domain | replace(".", "-") }} common_name="terraform.{{ aws_domain }}" ttl="24h"
+
+resource "vault_pki_secret_backend_cert" "terraform_{{ aws_domain | replace(".", "_") }}" {
+  issuer_ref  = vault_pki_secret_backend_issuer.intermediate.issuer_ref
+  backend     = vault_pki_secret_backend_role.intermediate_role.backend
+  name        = vault_pki_secret_backend_role.intermediate_role.name
+  common_name = "terraform.{{ aws_domain }}"
+  ttl         = 15480000
+  revoke      = true
+}
+
+output "vault_pki_secret_backend_cert_terraform_{{ aws_domain | replace(".", "_") }}_cert" {
+  value = vault_pki_secret_backend_cert.terraform_{{ aws_domain | replace(".", "_") }}.certificate
+}
+
+output "vault_pki_secret_backend_cert_terraform_{{ aws_domain | replace(".", "_") }}_serial_number" {
+  value = vault_pki_secret_backend_cert.terraform_{{ aws_domain | replace(".", "_") }}.serial_number
+}
+
+output "vault_pki_secret_backend_cert_terraform_{{ aws_domain | replace(".", "_") }}_ca_chain" {
+  value = vault_pki_secret_backend_cert.terraform_{{ aws_domain | replace(".", "_") }}.ca_chain
+}
+
+output "vault_pki_secret_backend_cert_terraform_{{ aws_domain | replace(".", "_") }}_private_key" {
+  value = vault_pki_secret_backend_cert.terraform_{{ aws_domain | replace(".", "_") }}.private_key
+  sensitive = true
+}

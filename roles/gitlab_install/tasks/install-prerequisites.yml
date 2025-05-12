@@ -1,0 +1,53 @@
+---
+
+- name: Ensure the cfb repository is enabled (VM/hardware)
+  community.general.rhsm_repository:
+    name: "codeready-builder-for-rhel-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-rpms"
+    state: enabled
+  when: ansible_board_vendor !=  "Amazon EC2"
+
+- name: Ensure the crb repository is enabled (AWS/RHUI)
+  community.general.dnf_config_manager:
+    name: "codeready-builder-for-rhel-{{ ansible_distribution_major_version }}-rhui-rpms"
+    state: enabled
+  when: ansible_board_vendor ==  "Amazon EC2"
+
+- name: Import EPEL GPG key
+  ansible.builtin.rpm_key:
+    state: present
+    key: "http://download.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_distribution_major_version }}"
+
+- name: Add EPEL repository for this release of RHEL
+  ansible.builtin.package:
+    name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version
+      }}.noarch.rpm
+    state: present
+
+- name: Install prerequisites
+  ansible.builtin.yum:
+    name:
+      - yum-utils
+      - policycoreutils
+      - openssh-server
+      - openssh-clients
+      - postfix
+      - python3-firewall
+      - python3-gitlab
+      - firewalld
+  register: packages_installed
+
+- name: Start/enable services
+  ansible.builtin.systemd:
+    name: "{{ service }}"
+    enabled: yes
+    state: started
+  loop_control:
+    loop_var: service
+  loop:
+    - sshd
+    - postfix
+    - firewalld
+  when:
+    - packages_installed.changed
+
+...

@@ -1,0 +1,131 @@
+# This is the AAP installer inventory file intended for the Container growth deployment topology.
+# This inventory file expects to be run from the host where AAP will be installed.
+# Please consult the Ansible Automation Platform product documentation about this topology's tested hardware configuration.
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/tested_deployment_models/container-topologies
+#
+# Please consult the docs if you're unsure what to add
+# For all optional variables please consult the included README.md
+# or the Ansible Automation Platform documentation:
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation
+
+# This section is for your AAP Gateway host(s)
+# -----------------------------------------------------
+[automationgateway]
+{% for host in groups['aap_hashi_aap'] %}
+{{ host }}
+{% endfor %}
+
+# This section is for your AAP Controller host(s)
+# -----------------------------------------------------
+[automationcontroller]
+{% for host in groups['aap_hashi_aap'] %}
+{{ host }}
+{% endfor %}
+
+# This section is for your AAP Automation Hub host(s)
+# -----------------------------------------------------
+[automationhub]
+{% for host in groups['aap_hashi_aap'] %}
+{{ host }}
+{% endfor %}
+
+# This section is for your AAP EDA Controller host(s)
+# -----------------------------------------------------
+[automationeda]
+{% for host in groups['aap_hashi_aap'] %}
+{{ host }}
+{% endfor %}
+
+# This section is for the AAP database
+# -----------------------------------------------------
+[database]
+{{ groups['aap_hashi_aap'][0] }}
+
+[all:vars]
+# Ansible
+ansible_connection=local
+
+# Common variables
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#ref-general-inventory-variables
+# -----------------------------------------------------
+postgresql_admin_username=postgres
+postgresql_admin_password={{ aap_install_common_password }}
+
+bundle_install=true
+# The bundle directory must include /bundle in the path
+# bundle_dir='{{ lookup("ansible.builtin.env", "PWD") }}/bundle'
+bundle_dir='{{ aap_install_installer_dir }}/bundle'
+
+redis_mode=standalone
+
+# AAP Gateway
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#ref-gateway-variables
+# -----------------------------------------------------
+gateway_admin_password={{ aap_install_common_password }}
+gateway_pg_host={{ groups['aap_hashi_aap'][0] }}
+gateway_pg_password={{ aap_install_common_password }}
+
+# AAP Controller
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#ref-controller-variables
+# -----------------------------------------------------
+controller_admin_password={{ aap_install_common_password }}
+controller_pg_host={{ groups['aap_hashi_aap'][0] }}
+controller_pg_password={{ aap_install_common_password }}
+controller_percent_memory_capacity=0.5
+
+# AAP Automation Hub
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#ref-hub-variables
+# -----------------------------------------------------
+hub_admin_password={{ aap_install_common_password }}
+hub_pg_host={{ groups['aap_hashi_aap'][0] }}
+hub_pg_password={{ aap_install_common_password }}
+hub_seed_collections=false
+
+# AAP EDA Controller
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#event-driven-ansible-controller
+# -----------------------------------------------------
+eda_admin_password={{ aap_install_common_password }}
+eda_pg_host={{ groups['aap_hashi_aap'][0] }}
+eda_pg_password={{ aap_install_common_password }}
+{% if aap_install_provide_certs %}
+
+# SSL Certificate Configuration
+
+custom_ca_cert={{ aap_install_cert_dir }}/{{ aap_install_custom_ca_cert }}
+
+# Platform gateway
+gateway_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+gateway_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+gateway_pg_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+gateway_pg_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+gateway_redis_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+gateway_redis_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+
+# Automation controller
+controller_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+controller_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+controller_pg_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+controller_pg_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+
+# Automation hub
+hub_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+hub_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+hub_pg_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+hub_pg_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+
+# Event-Driven Ansible
+eda_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+eda_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+eda_pg_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+eda_pg_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+eda_redis_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+eda_redis_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+
+# PostgreSQL
+postgresql_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+postgresql_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+
+# Receptor
+# receptor_tls_cert={{ aap_install_cert_dir }}/{{ aap_install_common_cert }}
+# receptor_tls_key={{ aap_install_cert_dir }}/{{ aap_install_common_key }}
+{% endif %}

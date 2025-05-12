@@ -1,0 +1,34 @@
+---
+
+- name: Provision Terraform for AAP-HashiCorp integrated demo
+  hosts: "{{ groups['aap_hashi_terraform'][0] }}"
+  tags: terraform_provision
+
+  roles:
+    - name: terraform_provision
+
+- name: Run installation for terraform
+  hosts: "{{ groups['aap_hashi_terraform'][0] }}"
+  tags: terraform_install
+
+  vars:
+    ansible_user: "{{ terraform_user }}"
+
+  roles:
+    - name: terraform_install
+
+  tasks:
+
+    - name: Copy admin token back
+      ansible.builtin.fetch:
+        src: "{{ terraform_install_admin_token }}"
+        dest: "{{ local_certdir }}/terraform-admin_token.txt"
+        flat: true
+
+    - name: Copy admin login back
+      ansible.builtin.fetch:
+        src: "{{ terraform_install_admin_login }}"
+        dest: "{{ local_certdir }}/terraform-admin_login.txt"
+        flat: true
+
+...

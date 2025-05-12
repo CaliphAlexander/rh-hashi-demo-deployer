@@ -1,0 +1,20 @@
+---
+
+# RHEL subscription
+terraform_provision_redhat_subscription: false
+terraform_provision_redhat_username: ''
+terraform_provision_redhat_password: ''
+
+# EPEL repo
+terraform_provision_epel_gpg_key_url: 'https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_distribution_major_version }}'
+terraform_provision_epel_rpm_url: 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm'
+
+# update RHEL packages to latest version
+terraform_provision_rhel_update: true
+
+# user info
+terraform_group: tfe
+terraform_user: tfe
+terraform_home_dir: /home/tfe
+
+...

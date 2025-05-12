@@ -1,0 +1,22 @@
+# https://developers.redhat.com/learning/learn:ansible:getting-started-ansible-content-collections/resource/resources:finding-and-installing-collections-and-using-them-playbooks?source=sso
+
+[defaults]
+inventory = ./inventory
+collections_path = ./collections:/usr/share/ansible/collections
+roles_path = ./roles:/usr/share/ansible/roles
+
+[galaxy]
+server_list = certified, validated, community_galaxy
+
+[galaxy_server.certified]
+url=https://cloud.redhat.com/api/automation-hub/content/published/
+auth_url=https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+token=<your token goes here>
+
+[galaxy_server.validated]
+url=https://cloud.redhat.com/api/automation-hub/content/validated/
+auth_url=https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+token=<your token goes here>
+
+[galaxy_server.community_galaxy]
+url=https://galaxy.ansible.com/

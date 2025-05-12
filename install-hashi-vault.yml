@@ -1,0 +1,296 @@
+# the following vars are needed for this playbook to work
+#
+# in group_vars.yml, you need to:
+#   - rename all-example.yml to all.yml
+#   - replace the following variables' content in group_vars/all.yml:
+#     - sub.uid
+#     - sub.gid
+#     - terraform.license
+#     - vault.domain
+#     - vault.intermediate_name
+#     - vailt.resource_name
+#     - vault.license
+#   - rename inventory.example to inventory
+#     - replace hostnames with your hosts' names
+# you will need NFR or actual HashiCorp Vault and Terraform license keys
+---
+- name: Provision vault for AAP-HashiCorp integrated demo
+  hosts: "{{ groups['aap_hashi_vault'] }}"
+  tags: vault
+
+  roles:
+    - name: vault_provision
+    - name: vault_openssl_ca
+    - name: vault_install
+
+  tasks:
+
+    - name: Configure vault
+      block:
+
+        - name: Set Vault FQDN fact
+          ansible.builtin.set_fact:
+            _vault_fqdn: "{{ vault_fqdn | default(inventory_hostname) }}"
+
+        - name: Set Vault URL fact
+          ansible.builtin.set_fact:
+            _vault_url: https://127.0.0.1:{{ vault_install_api_port | default('8200') }}
+
+        - name: Create storage directories
+          become: true
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: '0700'
+          loop:
+            - "{{ vault_root_token_dir | default('/root/.vault') }}"
+            - "{{ vault_unseal_key_dir | default('/root/.vault') }}"
+
+        - name: Check to see if vault is already initialized
+          ansible.builtin.command:
+            cmd: vault status -format=json
+          environment:
+            VAULT_ADDR: "{{ _vault_url }}"
+            VAULT_SKIP_VERIFY: "{{ vault_validate_certs | default(false) | ternary('false', 'true') }}"
+          register: vault_status_result
+          ignore_errors: true
+          changed_when: false
+
+        - name: Parse output of vault status
+          ansible.builtin.set_fact:
+            vault_status_parsed: "{{ vault_status_result.stdout | from_json }}"
+
+        - name: Debug vault status
+          ansible.builtin.debug:
+            var: vault_status_parsed
+          when: debug | default(false)
+
+        - name: Initialize Vault operator
+          ansible.builtin.command:
+            cmd: "vault operator init -key-shares {{ vault_key_count | default('5') }} -key-threshold {{ vault_key_threshold | default('3') }} -format json"
+          environment:
+            VAULT_ADDR: "{{ _vault_url }}"
+            VAULT_SKIP_VERIFY: "{{ vault_validate_certs | default(false) | ternary('false', 'true') }}"
+          register: vault_init_results
+          when: not vault_status_parsed.initialized
+
+    - name: Write keys to files
+      when: not vault_status_parsed.initialized
+      become: true
+      block:
+
+        - name: Parse output of vault init
+          ansible.builtin.set_fact:
+            vault_init_parsed: "{{ vault_init_results.stdout | from_json }}"
+
+        - name: Write unseal keys to files
+          ansible.builtin.template:
+            src: unseal_key.j2
+            dest: "{{ vault_unseal_key_dir | default('/root/.vault') }}/unseal_key_{{ item.0 }}"
+            mode: '0600'
+          with_indexed_items: "{{ vault_init_parsed.unseal_keys_hex }}"
+
+        - name: Write root token to file
+          ansible.builtin.copy:
+            content: "{{ vault_init_parsed.root_token }}"
+            dest: "{{ vault_root_token_dir | default('/root/.vault') }}/rootkey"
+            mode: '0600'
+
+    - name: Read keys from files
+      become: true
+      block:
+
+        - name: Read unseal key contents
+          ansible.builtin.shell:
+            cmd: "cat {{ vault_unseal_key_dir | default('/root/.vault') }}/unseal_key_*"
+          register: unseal_keys_result
+          changed_when: false
+
+        - name: Get root token from file
+          ansible.builtin.command:
+            cmd: cat "{{ vault_root_token_dir | default('/root/.vault') }}/rootkey"
+          register: root_token_result
+          changed_when: false
+
+        - name: Set root token var
+          ansible.builtin.set_fact:
+            root_token: "{{ root_token_result.stdout }}"
+
+        - name: Debug unseal keys
+          ansible.builtin.debug:
+            var: unseal_keys_result
+          when: debug | default(false)
+
+        - name: Debug root token
+          ansible.builtin.debug:
+            var: root_token_result
+          when: debug | default(false)
+
+    - name: Unseal vault and login with root token
+      block:
+        - name: Unseal vault via API with unseal keys
+          when: vault_status_parsed.sealed
+          ansible.builtin.uri:
+            url: "{{ _vault_url }}/v1/sys/unseal"
+            method: PUT
+            body_format: json
+            status_code: 200
+            body:
+              key: "{{ item }}"
+            validate_certs: "{{ vault_validate_certs | default(false) }}"
+          loop: "{{ unseal_keys_result.stdout_lines }}"
+          register: unseal_api_result
+
+        - name: Login and use the resulting token
+          community.hashi_vault.vault_login:
+            url: "{{ _vault_url }}"
+            auth_method: token
+            token: "{{ root_token }}"
+            validate_certs: "{{ vault_validate_certs | default(false) }}"
+          register: login_data
+
+        - name: Debug login data
+          ansible.builtin.debug:
+            var: login_data
+          when: debug | default(false)
+
+    - name: Create terraform project directories
+      ansible.builtin.file:
+        path: "{{ vault_terraform_certdir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Install terraform template to vault server
+      ansible.builtin.template:
+        src: vault.tf.j2
+        dest: "{{ vault_terraform_dir }}/vault.tf"
+        mode: '0644'
+
+    - name: Install package dependencies
+      ansible.builtin.dnf:
+        name:
+          - terraform
+        state: present
+      become: true
+
+    - name: Deploy vault configuration with SSL certificates
+      community.general.terraform:
+        project_path: "{{ vault_terraform_dir }}"
+        force_init: true
+        state: present
+      register: tf_vault_result
+
+    - name: Debug terraform apply
+      ansible.builtin.debug:
+        var: tf_vault_result
+      when: debug | default(false)
+
+    - name: Debug terraform apply
+      ansible.builtin.debug:
+        var: tf_vault_result.outputs.vault_pki_secret_backend_cert_aap_aap_jajcs_net_ca_chain.value
+      when: debug | default(false)
+
+    - name: Write certificates and keys to files
+      block:
+
+        - name: Copy intermediate cert to certdir
+          ansible.builtin.copy:
+            src: "{{ vault_terraform_dir }}/intermediate.cert.pem"
+            dest: "{{ vault_terraform_certdir }}/"
+            mode: '0644'
+            remote_src: true
+
+        - name: Write ca certificate to file
+          ansible.builtin.copy:
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_root_cert_root_2025']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/root_2025-ca.crt"
+            mode: '0644'
+          register: root_result
+
+        - name: Write chain certificates to files
+          ansible.builtin.copy:
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + aws_domain | replace('.', '_') + '_ca_chain']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ aws_domain }}-ca_chain.crt"
+            mode: '0644'
+          loop:
+            - aap
+            - gitlab
+            - terraform
+          register: chain_result
+
+        - name: Write server certificates to files
+          ansible.builtin.copy:
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + aws_domain | replace('.', '_') + '_cert']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ aws_domain }}-server.crt"
+            mode: '0644'
+          loop:
+            - aap
+            - gitlab
+            - terraform
+          register: cert_result
+
+        - name: Write server keys to files
+          ansible.builtin.copy:
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + aws_domain | replace('.', '_') + '_private_key']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ aws_domain }}-server.key"
+            mode: '0644'
+          loop:
+            - aap
+            - gitlab
+            - terraform
+          register: key_result
+
+        - name: Write serial numbers to files
+          ansible.builtin.copy:
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + aws_domain | replace('.', '_') + '_serial_number']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ aws_domain }}-serial.txt"
+            mode: '0644'
+          loop:
+            - aap
+            - gitlab
+            - terraform
+          register: serial_result
+
+        - name: Find all certs
+          ansible.builtin.find:
+            paths: "{{ vault_terraform_certdir }}"
+            patterns: "*"
+          register: cert_files
+
+        - name: Make sure that the local_certdir directory exists
+          delegate_to: localhost
+          ansible.builtin.file:
+            path: "{{ local_certdir }}"
+            state: directory
+            mode: '0755'
+
+        - name: Copy certs back
+          ansible.builtin.fetch:
+            src: "{{ item.path }}"
+            dest: "{{ local_certdir }}/"
+            flat: true
+          loop: "{{ cert_files.files }}"
+
+    - name: Add SSL certs to system trusted anchors
+      become: true
+      block:
+
+        - name: Copy ca cetificates to system trusted anchors
+          ansible.builtin.copy:
+            src: "{{ vault_terraform_certdir }}/{{ item }}"
+            dest: /etc/pki/ca-trust/source/anchors/root_2025-ca.pem
+            remote_src: true
+            owner: root
+            group: root
+            mode: '0644'
+          loop:
+            - root_2025-ca.crt
+            - intermediate.cert.pem
+          register: ssl_cert_install
+
+        - name: Update system ssl trust db
+          ansible.builtin.command:
+            cmd: update-ca-trust
+          when: ssl_cert_install.changed
+
+...

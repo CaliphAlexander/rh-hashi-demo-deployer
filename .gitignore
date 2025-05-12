@@ -1,0 +1,12 @@
+files/**
+**/collections/ansible_collections/
+inventory
+group_vars/all.yml
+ansible.cfg
+data/
+ec2_key*
+main.tf
+.terraform*
+.terraform/**
+terraform.tfstate*
+navigator-output/

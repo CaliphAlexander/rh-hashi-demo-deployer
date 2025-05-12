@@ -1,0 +1,8 @@
+---
+vault_openssl_ca_ca_key: /etc/pki/tls/private/hashivault-ca-certificate.key
+vault_openssl_ca_ca_cert: /etc/pki/tls/certs/hashivault-ca-certificate.pem
+vault_openssl_ca_ca_cn: HashiCorp Vault Demo
+vault_openssl_ca_ca_org: Red Hat
+vault_openssl_ca_ca_ou: Demo
+vault_openssl_ca_ca_state: North Carolina
+vault_openssl_ca_ca_locality: Raleigh

@@ -1,0 +1,62 @@
+# from: https://www.redhat.com/en/blog/installing-terraform-ce-rhel-9
+---
+
+- name: Create dir and copy over certs
+  become: true
+  tags: terraform_install_prep
+  when: terraform_install_provide_certs
+  block:
+
+    - name: Create storage directory for certificates
+      ansible.builtin.file:
+        path: "{{ terraform_install_cert_dir }}"
+        mode: '0755'
+        owner: "{{ terraform_user }}"
+        group: "{{ terraform_group }}"
+        state: directory
+
+    - name: Copy certs for this host
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ terraform_install_cert_dir }}"
+        owner: "{{ terraform_user }}"
+        group: "{{ terraform_group }}"
+        mode: '0644'
+      with_fileglob:
+        - "{{ local_cert_dir }}/{{ inventory_hostname_short }}*"
+        - "{{ local_cert_dir }}/root*"
+        - "{{ local_cert_dir }}/intermediate*"
+
+    - name: Copy ca cetificates to system trusted anchors
+      ansible.builtin.copy:
+        src: "{{ terraform_install_cert_dir }}/{{ item }}"
+        dest: /etc/pki/ca-trust/source/anchors/root_2025-ca.pem
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - root_2025-ca.crt
+        - intermediate.cert.pem
+      notify: Update system ssl trust db
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+- name: Execute installation
+  block:
+
+    - name: Import pre-tasks
+      become: true
+      tags: terraform_install_prerequisites
+      ansible.builtin.import_tasks: install-prerequisites.yml
+
+    - name: Install terraform
+      tags: terraform_install_install
+      ansible.builtin.import_tasks: install-terraform.yml
+
+    - name: Configure terraform
+      tags: terraform_install_configure
+      ansible.builtin.import_tasks: config-terraform.yml
+
+...

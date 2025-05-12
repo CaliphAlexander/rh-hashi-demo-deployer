@@ -1,0 +1,24 @@
+---
+
+gitlab_edition: 'community'
+
+gitlab_install_gitlab_group: root
+gitlab_install_gitlab_user: root
+gitlab_install_gitlab_user_dir: /root/gitlab
+
+# Install user-provided certs
+gitlab_install_provide_certs: false
+local_cert_dir: "{{ playbook_dir }}/data"
+gitlab_install_cert_dir: /etc/gitlab/ssl
+
+gitlab_install_installer_bundle: ansible-automation-platform-containerized-setup-bundle-2.5-11.1-x86_64.tar.gz
+gitlab_install_installer_dir: "{{ gitlab_install_gitlab_user_dir }}/{{ gitlab_install_installer_bundle | basename | regex_replace('\\.tar.gz$', '') }}"
+
+# installation inventory variable overrides
+gitlab_install_common_password: CHANGEME
+gitlab_install_common_cert: "{{ inventory_hostname }}-server.crt"
+gitlab_install_common_key: "{{ inventory_hostname }}-server.key"
+gitlab_install_custom_ca_cert: "custom-ca.crt"
+
+
+...

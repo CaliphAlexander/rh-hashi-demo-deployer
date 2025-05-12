@@ -1,0 +1,105 @@
+---
+
+- name: Install vault enterprise
+  become: true
+  block:
+
+    - name: Add hashicorp release yum repo
+      ansible.builtin.yum_repository:
+        name: hashicorp
+        description: Hashicorp Stable - $basearch
+        baseurl: "{{ vault_install_hashi_repo_url }}"
+        gpgcheck: true
+        gpgkey: "{{ vault_install_hashi_gpg_key_url }}"
+
+    - name: Install vault package
+      ansible.builtin.package:
+        name: "{{ vault_install_vault_package_name }}"
+        state: present
+
+    - name: Install vault enterprise license to /etc/vault.d
+      ansible.builtin.copy:
+        src: "{{ vault_install_vault_license_file }}"
+        dest: /etc/vault.d/vault.hclic
+        owner: vault
+        group: vault
+        mode: '0640'
+
+    - name: Install vault enterprise configuration
+      ansible.builtin.template:
+        src: vault.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+        owner: vault
+        group: vault
+        mode: '0640'
+
+    - name: Install user-defined Vault certificate
+      when: vault_install_tls_cert
+      block:
+        - name: Check if key is provided with certificate
+          ansible.builtin.assert:
+            that:
+              - vault_install_tls_key
+            fail_msg: "Variable 'vault_install_tls_key' must be set when 'vault_install_tls_cert' is set"
+
+        - name: Copy Vault certificate to required path
+          ansible.builtin.copy:
+            src: "{{ vault_install_tls_cert }}"
+            dest: "{{ vault_install_tls_cert_path }}"
+            owner: vault
+            group: vault
+            mode: '0640'
+
+        - name: Copy Vault certificate to required path
+          ansible.builtin.copy:
+            src: "{{ vault_install_tls_key }}"
+            dest: "{{ vault_install_tls_key_path }}"
+            owner: vault
+            group: vault
+            mode: '0640'
+
+    - name: Generate Vault self-signed certificate
+      when: not vault_install_tls_cert
+      block:
+        - name: Generate an OpenSSL private key with the default values (4096 bits, RSA)
+          community.crypto.openssl_privatekey:
+            path: "{{ vault_install_tls_key_path }}"
+            owner: vault
+            group: vault
+            mode: '0640'
+
+        - name: Generate a new certificate signing request for vault
+          community.crypto.openssl_csr_pipe:
+            privatekey_path: "{{ vault_install_tls_key_path }}"
+            common_name: "{{ inventory_hostname }}"
+            organization_name: "{{ vault_install_cert_org }}"
+            organizational_unit_name: "{{ vault_install_cert_ou }}"
+            state_or_province_name: "{{ vault_install_cert_state }}"
+            locality_name: "{{ vault_install_cert_locality }}"
+            subject_alt_name:
+              - "DNS:localhost"
+              - "DNS:{{ ansible_fqdn }}"
+              - "DNS:{{ inventory_hostname }}"
+              - "IP:127.0.0.1"
+              - "IP:{{ ansible_default_ipv4.address }}"
+          register: r_vault_csr
+
+        - name: Sign ssl certificate and key for vault
+          community.crypto.x509_certificate:
+            path: "{{ vault_install_tls_cert_path }}"
+            privatekey_path: "{{ vault_install_tls_key_path }}"
+            csr_content: "{{ r_vault_csr.csr }}"
+            provider: selfsigned
+            selfsigned_not_after: +365d  # valid for one year
+            selfsigned_not_before: "-1d"  # valid since yesterday
+            owner: vault
+            group: vault
+            mode: '0640'
+
+    - name: Start and enable vault service
+      ansible.builtin.service:
+        name: vault
+        state: started
+        enabled: true
+
+...

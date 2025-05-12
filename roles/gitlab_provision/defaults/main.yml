@@ -1,0 +1,10 @@
+---
+# RHEL subscription
+gitlab_provision_redhat_subscription: false
+gitlab_provision_redhat_username: ''
+gitlab_provision_redhat_password: ''
+
+# update RHEL packages to latest version
+gitlab_provision_rhel_update: true
+
+...

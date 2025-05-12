@@ -1,0 +1,27 @@
+---
+
+- name: Push gitlab repo file
+  ansible.builtin.template:
+    src: templates/gitlab.repo.j2
+    dest: "/etc/yum.repos.d/gitlab_gitlab-{{ edition_abbreviation }}.repo"
+    owner: root
+    group: root
+    mode: '0644'
+  register: repo_file_pushed
+
+- name: Clear yum cache
+  ansible.builtin.shell:
+    cmd: yum clean all
+  when:
+    - repo_file_pushed.changed
+
+- name: Import gitlab keys
+  ansible.builtin.rpm_key:
+    state: present
+    key: "{{ item }}"
+  loop:
+    - "https://packages.gitlab.com/gitlab/gitlab-{{ edition_abbreviation }}/gpgkey"
+    - "https://packages.gitlab.com/gitlab/gitlab-{{ edition_abbreviation }}/gpgkey/gitlab-gitlab-{{ edition_abbreviation }}-3D645A26AB9FBD22.pub.gpg"
+    - "https://packages.gitlab.com/gitlab/gitlab-{{ edition_abbreviation }}/gpgkey/gitlab-gitlab-{{ edition_abbreviation }}-CB947AD886C8E8FD.pub.gpg"
+
+...

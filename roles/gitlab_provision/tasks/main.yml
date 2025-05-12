@@ -1,0 +1,25 @@
+---
+
+- name: Basic provision of gitlab host
+  become: true
+  block:
+
+    - name: Register subscription for host with Red Hat
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ gitlab_provision_redhat_username }}"
+        password: "{{ gitlab_provision_redhat_password }}"
+        auto_attach: true
+      when: gitlab_provision_redhat_subscription
+
+    - name: Update all packages on system to current
+      ansible.builtin.package:
+        disablerepo: '*'
+        enablerepo:
+          - rhel-9-for-x86_64-baseos-rpms
+          - rhel-9-for-x86_64-appstream-rpms
+        name: '*'
+        state: latest
+      when: gitlab_provision_rhel_update
+
+...

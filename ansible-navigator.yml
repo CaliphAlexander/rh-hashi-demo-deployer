@@ -1,0 +1,20 @@
+# https://ansible.readthedocs.io/projects/navigator/
+---
+ansible-navigator:
+  ansible-runner:
+    artifact-dir: navigator-output/runner/
+    rotate-artifacts-count: 10
+  execution-environment:
+    container-engine: podman
+    image: quay.io/ajacocks/hashi-demo-ee:2025050907
+    pull:
+      policy: missing
+  logging:
+    level: info
+    append: false
+    file: navigator-output/ansible-navigator.log
+  playbook-artifact:
+    enable: true
+    save-as: navigator-output/{playbook_name}-artifact-{time_stamp}.json
+
+...

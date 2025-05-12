@@ -1,0 +1,113 @@
+---
+
+- name: Provision Gitlab for AAP-HashiCorp integrated demo
+  hosts: "{{ groups['aap_hashi_gitlab'][0] }}"
+  tags: gitlab
+
+  roles:
+    - name: gitlab_provision
+      tags: gitlab_provision
+    - name: gitlab_install
+      tags: gitlab_install
+
+      vars:
+        gitlab_admin_password: "{{ gitlab_install_password}}"
+        gitlab_edition: community
+
+  vars:
+    gitlab_localhost_priv_keyfile: "{{ playbook_dir }}/{{ ssh_key_name | default('gitlab_ssh_key') }}"
+#    gitlab_priv_keyfile: "{{ ansible_user_dir }}/{{ ssh_key_name | default('gitlab_ssh_key') }}"
+
+  tasks:
+
+    # - name: Check to see if there is already a gitlab SSH key, and if not make one, on localhost
+    #   delegate_to: localhost
+    #   block:
+
+    #     - name: Check to see if the file exists {{ gitlab_localhost_priv_keyfile }}
+    #       ansible.builtin.stat:
+    #         path: "{{ gitlab_localhost_priv_keyfile }}"
+    #       register: gitlab_keypair
+
+    #     - name: Debug gitlab_keypair when debug is defined, default false
+    #       ansible.builtin.debug:
+    #         var: gitlab_keypair
+    #       when: debug | default(false)
+
+    #     - name: Create a new gitlab keypair, if one doesn't exist
+    #       when: not gitlab_keypair.stat.exists
+    #       block:
+
+    #         - name: Generate an OpenSSH keypair with the default values (4096 bits, rsa)
+    #           community.crypto.openssh_keypair:
+    #             path: "{{ gitlab_localhost_priv_keyfile }}"
+
+    # - name: Copy gitlab_localhost_priv_keyfile to host
+    #   ansible.builtin.copy:
+    #     src: "{{ gitlab_localhost_priv_keyfile }}{{ item }}"
+    #     dest: "{{ gitlab_priv_keyfile }}{{ item }}"
+    #     owner: "{{ ansible_user }}"
+    #     mode: '0600'
+    #   loop:
+    #     - ""
+    #     - ".pub"
+  
+    # - name: Update GitLab root user email and ssh key
+    #   community.general.gitlab_user:
+    #     api_url: https://{{ inventory_hostname }}/
+    #     validate_certs: true
+    #     api_username: root
+    #     api_password: "{{ gitlab_install_password }}"
+    #     username: root
+    #     password: "{{ gitlab_install_password }}"
+    #     name: Administrator
+    #     email: "{{ email_address }}"
+    #     sshkey_name: root-ssh-key
+    #     sshkey_file: "{{ lookup( 'file', gitlab_localhost_priv_keyfile ~ '.pub' ) }}"
+    #     state: present
+
+    - name: Create GitLab demo-users group
+      community.general.gitlab_group:
+        api_url: https://{{ inventory_hostname }}/
+        validate_certs: true
+        api_username: root
+        api_password: "{{ gitlab_install_password }}"
+        name: demo-users
+        state: present
+
+    - name: Create GitLab User for AAP
+      community.general.gitlab_user:
+        api_url: https://{{ inventory_hostname }}/
+        validate_certs: true
+        api_username: root
+        api_password: "{{ gitlab_install_password }}"
+        name: AAP Demo User
+        username: aap
+        state: absent
+
+    - name: Create GitLab User for AAP
+      community.general.gitlab_user:
+        api_url: https://{{ inventory_hostname }}/
+        validate_certs: true
+        api_username: root
+        api_password: "{{ gitlab_install_password }}"
+        name: AAP Demo User
+        username: aap
+        password: "{{ gitlab_install_password }}"
+        email: "{{ gitlab_provision_redhat_username | default('nobody@email.com') }}"
+        sshkey_name: aap_ssh
+        sshkey_file: "{{ lookup( 'file', gitlab_localhost_priv_keyfile ~ '.pub' ) }}"
+        state: present
+        group: demo-users
+        access_level: owner
+        confirm: false
+
+    - name: Create GitLab Project
+      community.general.gitlab_project:
+        api_url: https://{{ inventory_hostname }}/
+        api_username: root
+        api_password: "{{ gitlab_install_password }}"
+        name: aap_demo
+        group: demo-users
+
+...

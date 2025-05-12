@@ -1,0 +1,91 @@
+---
+
+- name: Basic provision of terraform host
+  become: true
+  block:
+
+    - name: Register subscription for host with Red Hat
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ terraform_provision_redhat_username }}"
+        password: "{{ terraform_provision_redhat_password }}"
+        auto_attach: true
+      when: terraform_provision_redhat_subscription
+
+    - name: Install EPEL repo gpg key
+      ansible.builtin.rpm_key:
+        key: "{{ terraform_provision_epel_gpg_key_url }}"
+        state: present
+
+    - name: Install EPEL repo package
+      ansible.builtin.dnf:
+        name: "{{ terraform_provision_epel_rpm_url }}"
+        state: present
+
+    - name: Install required packages for AWS API actions
+      ansible.builtin.package:
+        name:
+          - python3-botocore
+          - python3-boto3
+        state: present
+
+    - name: Update all packages on system to current
+      ansible.builtin.package:
+        disablerepo: '*'
+        enablerepo:
+          - rhel-9-for-x86_64-baseos-rpms
+          - rhel-9-for-x86_64-appstream-rpms
+        name: '*'
+        state: latest
+      when: terraform_provision_rhel_update
+
+- name: Create user and home directory structure
+  become: true
+  block:
+
+    - name: Create group for terraform
+      ansible.builtin.group:
+        name: "{{ terraform_group }}"
+        state: present
+
+    - name: Create user for terraform
+      ansible.builtin.user:
+        name: "{{ terraform_user }}"
+        group: "{{ terraform_group }}"
+        groups: wheel
+        shell: /bin/bash
+        state: present
+        home: "{{ terraform_home_dir }}"
+        create_home: true
+
+    - name: Set user terraform_user to be able to sudo to root without a password
+      community.general.sudoers:
+        name: "99-{{ terraform_user }}"
+        user: "{{ terraform_user }}"
+        commands: ALL
+        nopassword: true
+
+    - name: Copy .ssh authorized keys from login user
+      ansible.builtin.copy:
+        src: /home/{{ ansible_user_id }}/.ssh/authorized_keys
+        dest: "~{{ terraform_user }}/.ssh/"
+        remote_src: true
+        owner: "{{ terraform_user }}"
+        group: "{{ terraform_group }}"
+        mode: '0644'
+
+    - name: Export podman.socket
+      ansible.builtin.lineinfile:
+        dest: "/home/{{ terraform_user }}/.bashrc"
+        line: "export DOCKER_HOST=unix:$XDG_RUNTIME_DIR/podman/podman.sock"
+        insertafter: "EOF"
+
+    - name: Copy over terraform license file
+      ansible.builtin.copy:
+        src: "{{ terraform_install_license_file }}"
+        dest: "{{ terraform_home_dir }}/"
+        owner: "{{ terraform_user }}"
+        group: "{{ terraform_group }}"
+        mode: '0644'
+
+...

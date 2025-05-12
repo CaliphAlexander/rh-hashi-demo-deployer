@@ -1,0 +1,23 @@
+[aap_hashi]
+[aap_hashi:vars]
+install_domain={{ domain_name }}
+ansible_user=ec2-user
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
+ansible_ssh_private_key_file={{ playbook_dir }}/ec2_key
+[aap_hashi:children]
+aap_hashi_vault
+aap_hashi_terraform
+aap_hashi_gitlab
+aap_hashi_aap
+
+[aap_hashi_vault]
+{{ vault_host }}
+
+[aap_hashi_terraform]
+{{ terraform_host }}
+
+[aap_hashi_gitlab]
+{{ gitlab_host }}
+
+[aap_hashi_aap]
+{{ aap_host }}

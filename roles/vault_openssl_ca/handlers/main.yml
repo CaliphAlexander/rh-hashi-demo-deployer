@@ -1,0 +1,9 @@
+---
+# code: language=ansible
+
+- name: Update system ssl trust db
+  ansible.builtin.command:
+    cmd: update-ca-trust
+  become: true
+
+...

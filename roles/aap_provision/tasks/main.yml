@@ -1,0 +1,63 @@
+---
+
+- name: Basic provision of aap host
+  become: true
+  block:
+
+    - name: Register subscription for host with Red Hat
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ aap_provision_redhat_username }}"
+        password: "{{ aap_provision_redhat_password }}"
+        auto_attach: true
+      when: aap_provision_redhat_subscription
+
+    - name: Update all packages on system to current
+      ansible.builtin.package:
+        disablerepo: '*'
+        enablerepo:
+          - rhel-9-for-x86_64-baseos-rpms
+          - rhel-9-for-x86_64-appstream-rpms
+        name: '*'
+        state: latest
+      when: aap_provision_rhel_update
+
+    - name: Install package dependencies
+      ansible.builtin.dnf:
+        name: "{{ aap_provision_rhel_packages }}"
+        state: present
+
+    - name: Create local AAP service account group
+      ansible.builtin.group:
+        name: "{{ aap_provision_aap_group }}"
+        state: present
+
+    - name: Create local AAP service account user
+      ansible.builtin.user:
+        name: "{{ aap_provision_aap_user }}"
+        group: "{{ aap_provision_aap_group }}"
+        system: true
+
+    - name: Add local AAP service account user to group wheel
+      ansible.builtin.user:
+        name: "{{ aap_provision_aap_user }}"
+        groups: wheel
+        append: true
+
+    - name: Set user aap_provision_aap_user to be able to sudo to root without a password
+      community.general.sudoers:
+        name: "99-{{ aap_provision_aap_user }}"
+        user: "{{ aap_provision_aap_user }}"
+        commands: ALL
+        nopassword: true
+
+    - name: Copy .ssh authorized keys from login user
+      ansible.builtin.copy:
+        src: /home/{{ ansible_user_id }}/.ssh/authorized_keys
+        dest: "~{{ aap_provision_aap_user }}/.ssh/"
+        remote_src: true
+        owner: "{{ aap_provision_aap_user }}"
+        group: "{{ aap_provision_aap_group }}"
+        mode: '0644'
+
+...

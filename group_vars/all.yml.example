@@ -1,0 +1,99 @@
+---
+
+# Domain name for environment
+domain_name: CHANGEME.DOMAIN.NAME 
+ssh_key_name: ec2_key
+email_address: DEFAULT@DOMAIN.NAME # the email address used to send emails from the demo
+
+# AWS information
+# this section is only used by deploy-hosts.yml for AWS deployment. Other deployments don't need it.
+aws_profile: default                        # aws profile name from ~/.aws/credentials
+aws_ami: ami-003555ce5d8d2de2b              # RHEL-9.5.0_HVM-20250313-x86_64-0-Access2-GP3 us-east-2
+aws_type: m7a.xlarge                        # 4 vCPUs, 16 GiB RAM 4g EPYC
+aws_domain: "{{ domain_name }}"
+aws_region: us-east-2
+ec2_priv_keyfile_name: "{{ ssh_key_name }}" 
+
+# AWS Demo Environment information
+demo_domain_name: sandbox371.opentlc.com
+# aws_demo_ami: ami-003555ce5d8d2de2b # RHEL-9.5.0_HVM-20250313-x86_64-0-Access2-GP3 us-east-2
+aws_demo_ami: ami-0dba7e0bdcb67941d # RHEL-9.5.0_HVM-20250313-x86_64-0-Access2-GP3 eu-west-1
+aws_demo_type: t3a.micro            # 2 vCPUs, 1 GiB RAM 1g EPYC
+aws_demo_region: eu-west-1
+
+# Override these role variables to attach a RHEL subscription to the Vault RHEL server
+# vault_provision_redhat_subscription: true
+# vault_provision_redhat_username: user@example.com
+# vault_provision_redhat_password: CHANGEME
+
+# Override this role variable to point to your local Vault license file
+# vault_install_vault_license_file: /tmp/vault.hclic
+
+# Override these role variables to point to user-provided cert/key files
+# vault_install_tls_cert: /path/to/cert.pem
+# vault_install_tls_key: /path/to/key.pem
+
+# Override these role variables to specify a different number of unseal keys or a different success threshold
+# vault_key_count: 5
+# vault_key_threshold: 3
+
+# Installation directories for Vault TF config
+vault_terraform_dir: "{{ ansible_user_dir }}/terraform"
+vault_terraform_certdir: "{{ ansible_user_dir }}/terraform/certs"
+
+# Override these role variables to attach a RHEL subscription to the AAP RHEL server
+# aap_provision_redhat_subscription: false
+# aap_provision_redhat_subscription_manifest: false
+# aap_provision_redhat_username: user@example.com
+# aap_provision_redhat_password: CHANGEME
+# aap_provision_redhat_pool: CHANGEME
+
+# Change this to change the default password for AAP
+aap_install_common_password: CHANGEME
+
+# Override these role variables to install user-provided CA certs to the system trust store
+# aap_install_provide_certs: false
+# aap_install_custom_ca_cert: "custom-ca.crt"
+
+# Change these to reset aap installation details
+aap_dir: /home/aap
+aap_installer: ansible-automation-platform-containerized-setup-bundle-2.5-11.1-x86_64.tar.gz
+aap_user: aap
+aap_validate_certs: true
+
+# Override these role variables to attach a RHEL subscription to the GitLab RHEL server
+# gitlab_provision_redhat_subscription: false
+# gitlab_provision_redhat_username: user@example.com
+# gitlab_provision_redhat_password: CHANGEME
+
+# Set the GitLab admin password here
+gitlab_install_password: CHANGEME
+
+# Override these role variables to install user-provided CA certs to the system trust store
+# gitlab_install_provide_certs: false
+
+# Change these to rename the terraform user or relocate its home directory
+terraform_group: tfe
+terraform_user: tfe
+terraform_home_dir: /home/tfe
+
+# Override these role variables to attach a RHEL subscription to the Terraform RHEL server
+# terraform_provision_redhat_subscription: false
+# terraform_provision_redhat_username: user@example.com
+# terraform_provision_redhat_password: CHANGEME
+
+# Override this role variable to point to your local Terraform license file
+terraform_install_license_file: /tmp/terraform.hclic
+
+# Set the Terraform admin user password here (minimum 10 characters)
+terraform_install_common_password: CHANGEMENOW
+
+# Set the Terraform admin user credentials here
+terraform_install_admin_email: CHANGEME@CHANGEME.COM
+terraform_install_admin_orgname: CHANGEME
+terraform_install_admin_workspace: CHANGEME
+
+# where certificates are stored on the executing host
+local_certdir: "{{ playbook_dir }}/data"
+
+...

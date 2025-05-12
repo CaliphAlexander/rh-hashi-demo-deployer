@@ -1,0 +1,137 @@
+# from: https://www.redhat.com/en/blog/installing-gitlab-ce-rhel-9
+---
+
+- name: Create dir and copy over certs
+  become: true
+  when: gitlab_install_provide_certs
+  block:
+
+    - name: Create storage directory for certificates
+      ansible.builtin.file:
+        path: "{{ gitlab_install_cert_dir }}"
+        mode: '0755'
+        owner: "{{ gitlab_install_gitlab_user }}"
+        group: "{{ gitlab_install_gitlab_group }}"
+        state: directory
+
+    - name: Copy certs for this host
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ gitlab_install_cert_dir }}"
+        owner: "{{ gitlab_install_gitlab_user }}"
+        group: "{{ gitlab_install_gitlab_group }}"
+        mode: '0644'
+      with_fileglob:
+        - "{{ local_cert_dir }}/{{ inventory_hostname_short }}*"
+        - "{{ local_cert_dir }}/root*"
+        - "{{ local_cert_dir }}/intermediate*"
+
+    - name: Copy ca cetificates to system trusted anchors
+      ansible.builtin.copy:
+        src: "{{ gitlab_install_cert_dir }}/{{ item }}"
+        dest: /etc/pki/ca-trust/source/anchors/root_2025-ca.pem
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - root_2025-ca.crt
+        - intermediate.cert.pem
+      notify: Update system ssl trust db
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+- name: Set vars for community edition
+  ansible.builtin.include_tasks:
+    file: set-ce-edition.yml
+  when:
+    - gitlab_edition == 'community'
+
+- name: Set vars for enterprise edition
+  ansible.builtin.include_tasks:
+    file: set-ee-edition.yml
+  when:
+    - gitlab_edition == 'enterprise'
+
+- name: Execute installation
+  become: true
+  block:
+
+    - name: Import pre-tasks
+      ansible.builtin.import_tasks: install-prerequisites.yml
+
+    - name: Setup gitlab repo
+      ansible.builtin.import_tasks: setup-gitlab-repo.yml
+
+    - name: Install gitlab
+      ansible.builtin.import_tasks: install-gitlab.yml
+
+- name: Configure SSL for GitLab with provided certs
+  notify:
+    - Reconfigure gitlab
+    - Restart gitlab nginx
+  become: true
+  when: gitlab_install_provide_certs
+  block:
+
+    - name: Disable Let's Encrypt
+      ansible.builtin.lineinfile:
+        path: /etc/gitlab/gitlab.rb
+        regexp: "^\\s*#?\\s*letsencrypt\\['enable'\\]\\s*="
+        line: "letsencrypt['enable'] = false"
+
+    - name: Check to see if the server.crt already exists in gitlab_install_cert_dir
+      ansible.builtin.stat:
+        path: "{{ gitlab_install_cert_dir }}/{{ inventory_hostname }}.crt"
+      register: gitlab_install_server_crt
+
+    - name: If the cert exists, use openssl verify to check it
+      when: gitlab_install_server_crt.stat.exists
+      block:
+        - name: Check the server certificate's authenticity
+          ansible.builtin.command:
+            cmd: openssl verify -CAfile "{{ gitlab_install_cert_dir }}/intermediate.cert.pem" "{{ gitlab_install_cert_dir }}/{{ inventory_hostname }}.crt"
+          changed_when: false
+          ignore_errors: true
+          register: gitlab_install_cert_check
+
+    - name: Debug certificate details
+      ansible.builtin.debug:
+        var: gitlab_install_cert_check
+      when: debug | default(false)
+
+    - name: Remove server cert when gitlab_install_server_crt.stat.exists and gitlab_install_cert_check.rc != 0
+      ansible.builtin.file:
+        path: "{{ gitlab_install_cert_dir }}/{{ inventory_hostname }}.crt"
+        state: absent
+      when:
+        - gitlab_install_server_crt.stat.exists
+        - gitlab_install_cert_check.rc != 0
+
+    - name: Create GitLab SSL certificate from gitlab-ssl-cert.pem.j2 template
+      when: gitlab_install_cert_check.rc != 0
+      ansible.builtin.shell:
+        cmd: "cat {{ inventory_hostname }}-server.crt <(echo) intermediate.cert.pem > {{ inventory_hostname }}.crt"
+        chdir: "{{ gitlab_install_cert_dir }}"
+        creates: "{{ gitlab_install_cert_dir }}/{{ inventory_hostname }}.crt"
+
+    - name: Create required gitlab certificate key symlink
+      ansible.builtin.file:
+        src: "{{ gitlab_install_cert_dir }}/{{ inventory_hostname }}-server.key"
+        dest: "{{ gitlab_install_cert_dir }}/{{ inventory_hostname }}.key"
+        state: link
+        force: true
+
+- name: Flush handlers
+  become: true
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for gitlab nginx to be listening on port 443 on localhost again
+  ansible.builtin.wait_for:
+    port: 443
+    delay: 30
+    host: localhost
+    state: started
+
+...

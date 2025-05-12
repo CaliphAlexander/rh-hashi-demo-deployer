@@ -1,0 +1,59 @@
+---
+
+- name: Install prerequisites
+  ansible.builtin.yum:
+    name:
+      - yum-utils
+      - policycoreutils
+      - openssh-server
+      - openssh-clients
+      - container-tools
+      - cockpit-podman
+      - podman-docker
+      - dbus
+      - python3-firewall
+      - firewalld
+  register: packages_installed
+
+- name: Start/enable services
+  ansible.builtin.systemd:
+    name: "{{ service }}"
+    enabled: true
+    state: started
+  loop_control:
+    loop_var: service
+  loop:
+    - podman
+    - firewalld
+  when:
+    - packages_installed.changed
+
+- name: Create needed storage directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ terraform_user }}"
+    group: "{{ terraform_group }}"
+    mode: '0755'
+  loop:
+    - "{{ terraform_install_terraform_user_dir }}"
+    - "{{ terraform_install_terraform_data_dir }}"
+
+- name: Add ports 80 as minimum port allowed for unprivileged use
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_unprivileged_port_start
+    value: '80'
+    sysctl_file: /etc/sysctl.d/98-terraform.conf
+    reload: true
+
+- name: Open http and https services in firewall
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop:
+    - http
+    - https
+
+...

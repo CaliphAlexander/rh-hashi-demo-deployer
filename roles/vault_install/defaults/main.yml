@@ -1,0 +1,24 @@
+---
+vault_install_hashi_repo_url: https://rpm.releases.hashicorp.com/RHEL/$releasever/$basearch/stable
+vault_install_hashi_gpg_key_url: https://rpm.releases.hashicorp.com/gpg
+vault_install_vault_package_name: vault-enterprise
+
+vault_install_vault_license_file: /tmp/vault.hclic
+
+vault_install_tls_cert: ''
+vault_install_tls_key: ''
+vault_install_tls_cert_path: /etc/vault.d/vault-cert.pem
+vault_install_tls_key_path: /etc/vault.d/vault-key.pem
+vault_install_cert_org: Red Hat
+vault_install_cert_ou: Demo
+vault_install_cert_state: North Carolina
+vault_install_cert_locality: Raleigh
+
+vault_install_api_fqdn: "{{ inventory_hostname }}"
+vault_install_api_addr: 0.0.0.0
+vault_install_api_port: 8200
+vault_install_cluster_fqdn: localhost
+vault_install_cluster_addr: 127.0.0.1
+vault_install_cluster_port: 8201
+
+...

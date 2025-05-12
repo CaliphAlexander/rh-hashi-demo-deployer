@@ -1,0 +1,20 @@
+---
+aap_install_aap_group: aap
+aap_install_aap_user: aap
+aap_install_aap_user_dir: /home/{{ aap_install_aap_user }}
+
+# Install user-provided certs
+aap_install_provide_certs: false
+local_cert_dir: "{{ playbook_dir }}/data"
+aap_install_cert_dir: "{{ aap_install_aap_user_dir }}/certs"
+
+aap_install_installer_bundle: ansible-automation-platform-containerized-setup-bundle-2.5-11.1-x86_64.tar.gz
+aap_install_installer_dir: "{{ aap_install_aap_user_dir }}/{{ aap_install_installer_bundle | basename | regex_replace('\\.tar.gz$', '') }}"
+
+# installation inventory variable overrides
+aap_install_common_password: CHANGEME
+aap_install_common_cert: "{{ inventory_hostname }}-server.crt"
+aap_install_common_key: "{{ inventory_hostname }}-server.key"
+aap_install_custom_ca_cert: "custom-ca.crt"
+
+...
