@@ -209,8 +209,8 @@
 
         - name: Write chain certificates to files
           ansible.builtin.copy:
-            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + aws_domain | replace('.', '_') + '_ca_chain']['value'] }}"
-            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ aws_domain }}-ca_chain.crt"
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + install_domain | replace('.', '_') + '_ca_chain']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ install_domain }}-ca_chain.crt"
             mode: '0644'
           loop:
             - aap
@@ -220,8 +220,8 @@
 
         - name: Write server certificates to files
           ansible.builtin.copy:
-            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + aws_domain | replace('.', '_') + '_cert']['value'] }}"
-            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ aws_domain }}-server.crt"
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + install_domain | replace('.', '_') + '_cert']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ install_domain }}-server.crt"
             mode: '0644'
           loop:
             - aap
@@ -231,8 +231,8 @@
 
         - name: Write server keys to files
           ansible.builtin.copy:
-            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + aws_domain | replace('.', '_') + '_private_key']['value'] }}"
-            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ aws_domain }}-server.key"
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + install_domain | replace('.', '_') + '_private_key']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ install_domain }}-server.key"
             mode: '0644'
           loop:
             - aap
@@ -242,8 +242,8 @@
 
         - name: Write serial numbers to files
           ansible.builtin.copy:
-            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + aws_domain | replace('.', '_') + '_serial_number']['value'] }}"
-            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ aws_domain }}-serial.txt"
+            content: "{{ tf_vault_result['outputs']['vault_pki_secret_backend_cert_' + item + '_' + install_domain | replace('.', '_') + '_serial_number']['value'] }}"
+            dest: "{{ vault_terraform_certdir }}/{{ item }}.{{ install_domain }}-serial.txt"
             mode: '0644'
           loop:
             - aap

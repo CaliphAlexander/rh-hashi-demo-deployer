@@ -1,7 +1,7 @@
 ---
 
-# Domain name for environment
-domain_name: CHANGEME.DOMAIN.NAME 
+# Domain name for environment - define this if you don't want the deployer to use the first domain it finds in AWS Route53
+# domain_name: CHANGEME.DOMAIN.NAME 
 ssh_key_name: ec2_key
 email_address: DEFAULT@DOMAIN.NAME # the email address used to send emails from the demo
 

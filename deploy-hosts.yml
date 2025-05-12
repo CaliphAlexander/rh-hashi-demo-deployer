@@ -19,7 +19,7 @@
         msg: Terraform isn't installed. Please install Terraform before proceeding.
       when: terraform_path.rc != 0
 
-    - name: Lookup the necessary AWS R53 hosted zone ID
+    - name: Lookup the necessary AWS R53 hosted zone ID 
       block:
 
         - name: List all hosted zones
@@ -33,15 +33,46 @@
             var: hosted_zones
           when: debug | default(false)
 
-        - name: Set r53_zone_id fact with hosted_zones zone ID based on name
-          ansible.builtin.set_fact:
-            r53_zone_id: "{{ item.Id | replace('/hostedzone/', '') }}"
-          when: item.Name == ( aws_domain ~ '.' )
-          loop: "{{ hosted_zones.HostedZones | flatten(levels=1) }}"
+        - name: If domain_name is specified, look for that zone ID
+          when: domain_name is defined
+          block:
 
-        - name: Debug r53_zone_id, default false
+            - name: Set r53_zone_id fact with hosted_zones zone ID based on name
+              ansible.builtin.set_fact:
+                r53_zone_id: "{{ item.Id | replace('/hostedzone/', '') }}"
+              when: item.Name == ( domain_name ~ '.' )
+              loop: "{{ hosted_zones.HostedZones | flatten(levels=1) }}"
+
+            - name: Debug r53_zone_id, default false
+              ansible.builtin.debug:
+                var: r53_zone_id
+              when: debug | default(false)
+
+        - name: If domain_name is not specified, take the first zone ID and set domain_name
+          when: domain_name is undefined
+          block:
+
+            - name: Debug hosted_zones.HostedZones, default false
+              ansible.builtin.debug:
+                var: hosted_zones.HostedZones | flatten(levels=1)
+              when: debug | default(false)
+
+            - name: Set r53_zone_id fact with hosted_zones first zone ID
+              ansible.builtin.set_fact:
+                r53_zone_id: "{{ hosted_zones.HostedZones[0].Id | replace('/hostedzone/', '') }}"
+
+            - name: Debug r53_zone_id, default false
+              ansible.builtin.debug:
+                var: r53_zone_id
+              when: debug | default(false)
+
+            - name: Set domain_name fact with hosted_zones first domain name
+              ansible.builtin.set_fact:
+                domain_name: "{{ hosted_zones.HostedZones[0].Name | regex_replace('\\.$', '') }}"
+
+        - name: Debug zone ID and domain_name, default false
           ansible.builtin.debug:
-            var: r53_zone_id
+            msg: "Using zone named {{ domain_name }} with zone ID {{ r53_zone_id }}."
           when: debug | default(false)
 
     - name: Template main.tf.j2 to a temporary file name in the current directory
