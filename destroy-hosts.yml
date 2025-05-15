@@ -1,0 +1,188 @@
+---
+
+- name: Deprovision Terraform for AAP-HashiCorp integrated demo
+  hosts: localhost
+  tags: infrastructure
+
+  vars:
+    ec2_priv_keyfile: "{{ playbook_dir }}/{{ ec2_priv_keyfile_name }}"
+
+  tasks:
+
+    - name: Check to see if terraform is in the path
+      ansible.builtin.command: terraform version
+      register: terraform_path
+      changed_when: false
+
+    - name: If terraform_path.rc != 0, let the user know that terraform isn't installed and exit
+      ansible.builtin.fail:
+        msg: Terraform isn't installed. Please install Terraform before proceeding.
+      when: terraform_path.rc != 0
+
+    - name: Lookup the necessary AWS R53 hosted zone ID 
+      block:
+
+        - name: List all hosted zones
+          amazon.aws.route53_info:
+            query: hosted_zone
+            hosted_zone_method: list_by_name
+          register: hosted_zones
+
+        - name: Debug hosted_zones, default false
+          ansible.builtin.debug:
+            var: hosted_zones
+          when: debug | default(false)
+
+        - name: If domain_name is specified, look for that zone ID
+          when: domain_name is defined
+          block:
+
+            - name: Set r53_zone_id fact with hosted_zones zone ID based on name
+              ansible.builtin.set_fact:
+                r53_zone_id: "{{ item.Id | replace('/hostedzone/', '') }}"
+              when: item.Name == ( domain_name ~ '.' )
+              loop: "{{ hosted_zones.HostedZones | flatten(levels=1) }}"
+
+            - name: Debug r53_zone_id, default false
+              ansible.builtin.debug:
+                var: r53_zone_id
+              when: debug | default(false)
+
+        - name: If domain_name is not specified, take the first zone ID and set domain_name
+          when: domain_name is undefined
+          block:
+
+            - name: Debug hosted_zones.HostedZones, default false
+              ansible.builtin.debug:
+                var: hosted_zones.HostedZones | flatten(levels=1)
+              when: debug | default(false)
+
+            - name: Set r53_zone_id fact with hosted_zones first zone ID
+              ansible.builtin.set_fact:
+                r53_zone_id: "{{ hosted_zones.HostedZones[0].Id | replace('/hostedzone/', '') }}"
+
+            - name: Debug r53_zone_id, default false
+              ansible.builtin.debug:
+                var: r53_zone_id
+              when: debug | default(false)
+
+            - name: Set domain_name fact with hosted_zones first domain name
+              ansible.builtin.set_fact:
+                domain_name: "{{ hosted_zones.HostedZones[0].Name | regex_replace('\\.$', '') }}"
+
+        - name: Debug zone ID and domain_name, default false
+          ansible.builtin.debug:
+            msg: "Using zone named {{ domain_name }} with zone ID {{ r53_zone_id }}."
+          when: debug | default(false)
+
+#     - name: Create a new EC2 keypair, if one doesn't exist
+#       when: not ec2_keypair.stat.exists and keypair_info.keypairs | length == 0
+#       block:
+
+#         - name: Generate an OpenSSH keypair with the default values (4096 bits, rsa)
+#           community.crypto.openssh_keypair:
+#             path: "{{ ec2_priv_keyfile }}"
+
+#         - name: Create a new EC2 key pair, returns generated private key
+#           amazon.aws.ec2_key:
+#             name: rh_hashi_keypair
+#             key_material: "{{ lookup( 'file', ec2_priv_keyfile ~ '.pub' ) }}"
+# #          no_log: true
+#           register: aws_ec2_key_pair
+
+    - name: Destroy hosts in AWS
+      community.general.terraform:
+        project_path: "{{ playbook_dir }}"
+        force_init: true
+        state: absent
+      register: tf_hosts_result
+
+    - name: Debug terraform apply
+      ansible.builtin.debug:
+        var: tf_hosts_result
+      when: debug | default(false)
+
+    # - name: Template main.tf.j2 to a temporary file name in the current directory
+    #   ansible.builtin.template:
+    #     src: templates/main.tf.j2
+    #     dest: "{{ playbook_dir }}/main.tf"
+    #     force: true
+    #     mode: '0644'
+
+    # - name: Check to see if the file exists {{ ec2_priv_keyfile }}
+    #   ansible.builtin.stat:
+    #     path: "{{ ec2_priv_keyfile }}"
+    #   register: ec2_keypair
+
+    # - name: Debug ec2_keypair when debug is defined, default false
+    #   ansible.builtin.debug:
+    #     var: ec2_keypair
+    #   when: debug | default(false)
+
+    - name: Check to see if a keypair named "rh_hashi_keypair" exists in AWS
+      amazon.aws.ec2_key_info:
+        names:
+          - rh_hashi_keypair
+      register: keypair_info
+
+    # - name: Debug keypair_info when debug is defined, default false
+    #   ansible.builtin.debug:
+    #     var: keypair_info
+    #   when: debug | default(false)
+
+    - name: Remove AWS keypair called rh_hashi_keypair
+      when: keypair_info.keypairs | length >= 0
+      block:
+
+        - name: Remove EC2 key pair, called rh_hashi_keypair with the contents of the file ec2_priv_keyfile
+          amazon.aws.ec2_key:
+            name: rh_hashi_keypair
+            # key_material: "{{ lookup( 'file', ec2_priv_keyfile ~ '.pub' ) }}"
+            state: absent
+
+    # - name: Debug host names
+    #   ansible.builtin.debug:
+    #     var: tf_hosts_result.outputs.instance_dns_names.value
+    #   when: debug | default(false)
+
+    # - name: Debug ip addresses
+    #   ansible.builtin.debug:
+    #     var: tf_hosts_result.outputs.instance_public_ips.value
+    #   when: debug | default(false)
+
+    # - name: Set fact terraform_host
+    #   ansible.builtin.set_fact:
+    #     terraform_host: "{{ tf_hosts_result.outputs.instance_dns_names.value | select('match', 'terraform.*') | list | first }}"
+
+    # - name: Set fact aap_host
+    #   ansible.builtin.set_fact:
+    #     aap_host: "{{ tf_hosts_result.outputs.instance_dns_names.value | select('match', 'aap.*') | list | first }}"
+
+    # - name: Set fact gitlab_host
+    #   ansible.builtin.set_fact:
+    #     gitlab_host: "{{ tf_hosts_result.outputs.instance_dns_names.value | select('match', 'gitlab.*') | list | first }}"
+
+    # - name: Set fact vault_host
+    #   ansible.builtin.set_fact:
+    #     vault_host: "{{ tf_hosts_result.outputs.instance_dns_names.value | select('match', 'vault.*') | list | first }}"
+
+    # - name: Debug hosts list
+    #   ansible.builtin.debug:
+    #     msg:
+    #       - 'terraform_host: {{ terraform_host }}'
+    #       - 'aap_host: {{ aap_host }}'
+    #       - 'gitlab_host: {{ gitlab_host }}'
+    #       - 'vault_host: {{ vault_host }}'
+    #   when: debug | default(false)
+
+    # - name: Template inventory.j2 to playbook_dir/inventory
+    #   ansible.builtin.template:
+    #     src: templates/inventory.j2
+    #     dest: '{{ playbook_dir }}/inventory'
+    #     force: true
+    #     mode: '0644'
+
+    - name: Force inventory refresh
+      ansible.builtin.meta: refresh_inventory
+
+...

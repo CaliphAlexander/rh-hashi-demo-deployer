@@ -4,75 +4,79 @@
   tags: aap
 
   roles:
-    - name: aap_provision
-    - name: aap_install
 
-- name: Run installation for aap
+    - name: aap_provision
+      tags: aap_provision
+    - name: aap_install
+      tags: aap_install
+
+- name: Run configuration for aap
   hosts: "{{ groups['aap_hashi_aap'][0] }}"
-  tags: aap
+  tags: aap_configure
 
   vars:
+
     ansible_user: "{{ aap_user }}"
-    installer_extracted: "{{ aap_installer | regex_replace('\\.tar.gz$', '') }}"
 
   tasks:
 
-    - name: Run the AAP installer
-      tags: aap_install
-      block:
+    - name: Add a new organization to controller
+      ansible.platform.organization:
+        gateway_hostname: "{{ inventory_hostname }}"
+        gateway_username: admin
+        gateway_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        name: "RH-Hashi"
+        state: present
 
-        - name: Run the Ansible Automation Platform setup program
-          ansible.builtin.shell: "ansible-playbook -i inventory ansible.containerized_installer.install"
-          args:
-            chdir: "{{ aap_dir }}/{{ installer_extracted }}"
-          async: 10000
-          poll: 20
-          changed_when: false
+    - name: Add a new inventory to controller
+      register: inventory
+      ansible.controller.inventory:
+        name: "RH-Hashi"
+        organization: "RH-Hashi"
+        description: Inventory for AAP
+        state: present
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
 
-        - name: Wait for automation controller to be running
-          ansible.builtin.uri: # use the first host from the list if no hostname is defined
-            url: https://{{ inventory_hostname }}:443/
-            method: GET
-            user: admin
-            password: "{{ aap_install_common_password }}"
-            force_basic_auth: true
-            status_code: 200
-            validate_certs: "{{ aap_validate_certs | default(omit) }}"
-          register: __aap_setup_inst_result
-          until: __aap_setup_inst_result.status == 200
-          retries: 90
-          delay: 10
+    - name: Add hosts from local inventory to controller with ansible.controller.host
+      loop: "{{ groups['all'] }}"
+      ansible.controller.host:
+        name: "{{ item }}"
+        inventory: "RH-Hashi"
+        state: present
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
 
-    - name: Add a subscription to the AAP host
-      when: aap_provision_redhat_subscription | default(false)
-      block:
+    - name: Add groups from local inventory to controller with ansible.controller.group
+      ansible.controller.group:
+        name: "{{ item.key }}"
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        inventory: "RH-Hashi"
+        hosts: "{{ groups[ item.key ] }}"
+      when: item.key != "all" and item.key != "ungrouped" and item.key != "aap_hashi"
+      loop: "{{ lookup('ansible.builtin.dict', groups) }}"
 
-        - name: Upload the subscription manifest to the aap host
-          ansible.builtin.copy:
-            src: "{{ aap.license }}"
-            dest: "{{ aap_dir }}/aap-license.zip"
-            mode: '0644'
-          when: aap_provision_redhat_manifest | default(false)
-
-        - name: Use online subscription attachement
-          when: not aap_provision_redhat_manifest | default(false)
-          block:
-
-            - name: Use the subscriptions module to fetch subscriptions from Red Hat or Red Hat Satellite
-              ansible.controller.subscriptions:
-                controller_host: "{{ inventory_hostname }}"
-                controller_username: admin
-                controller_password: "{{ aap_install_common_password }}"
-                username: "{{ aap_provision_redhat_username }}"
-                password: "{{ aap_provision_redhat_password }}"
-              
-
-            - name: Install the subscription with a pool ID
-              ansible.controller.license:
-                controller_host: "{{ inventory_hostname }}"
-                controller_username: admin
-                controller_password: "{{ aap_install_common_password }}"
-                pool_id: "{{ aap_provision_redhat_pool }}"
+    - name: Add aap_hashi group from local inventory to controller with ansible.controller.group
+      ansible.controller.group:
+        name: "aap_hashi"
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        inventory: "RH-Hashi"
+        children:
+          - aap_hashi_aap
+          - aap_hashi_gitlab
+          - aap_hashi_terraform
+          - aap_hashi_vault
 
     # - name: Wait for automation hub to be running
     #   ansible.builtin.uri: # use the first host from the list if no hostname is defined

@@ -15,7 +15,6 @@ aws_region: us-east-2
 ec2_priv_keyfile_name: "{{ ssh_key_name }}" 
 
 # AWS Demo Environment information
-demo_domain_name: sandbox371.opentlc.com
 # aws_demo_ami: ami-003555ce5d8d2de2b # RHEL-9.5.0_HVM-20250313-x86_64-0-Access2-GP3 us-east-2
 aws_demo_ami: ami-0dba7e0bdcb67941d # RHEL-9.5.0_HVM-20250313-x86_64-0-Access2-GP3 eu-west-1
 aws_demo_type: t3a.micro            # 2 vCPUs, 1 GiB RAM 1g EPYC

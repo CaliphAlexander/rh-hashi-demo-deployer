@@ -8,7 +8,7 @@ aap_install_provide_certs: false
 local_cert_dir: "{{ playbook_dir }}/data"
 aap_install_cert_dir: "{{ aap_install_aap_user_dir }}/certs"
 
-aap_install_installer_bundle: ansible-automation-platform-containerized-setup-bundle-2.5-11.1-x86_64.tar.gz
+aap_install_installer_bundle: "{{ aap_installer }}"
 aap_install_installer_dir: "{{ aap_install_aap_user_dir }}/{{ aap_install_installer_bundle | basename | regex_replace('\\.tar.gz$', '') }}"
 
 # installation inventory variable overrides

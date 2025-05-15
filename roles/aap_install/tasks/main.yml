@@ -70,4 +70,115 @@
         group: "{{ aap_install_aap_group }}"
         mode: '0644'
 
+    - name: Check if user is lingering
+      ansible.builtin.stat:
+        path: "/var/lib/systemd/linger/{{ aap_install_aap_user }}"
+      register: user_lingering
+
+    - name: Enable lingering for user
+      ansible.builtin.command: "loginctl enable-linger {{ aap_install_aap_user }}"
+      changed_when: true
+      when: not user_lingering.stat.exists
+
+    - name: Get podman user info
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ aap_install_aap_user }}"
+        fail_key: false
+
+    - name: Enable podman.socket for user
+      ansible.builtin.systemd:
+        name: podman.socket
+        enabled: true
+        state: started
+        scope: user
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd[aap_install_aap_user].1 }}"
+
+    - name: Run the Ansible Automation Platform setup program
+      ansible.builtin.shell:
+      args:
+        cmd: "ansible-playbook -i inventory ansible.containerized_installer.install 2>&1 | tee -a ansible.containerized_installer.install.log"
+        chdir: "{{ aap_install_installer_dir }}"
+        creates: ".install_complete"
+      async: 10000
+      poll: 20
+      changed_when: false
+
+    - name: Wait for automation controller to be running
+      ansible.builtin.uri: # use the first host from the list if no hostname is defined
+        url: https://{{ inventory_hostname }}:443/
+        method: GET
+        user: admin
+        password: "{{ aap_install_common_password }}"
+        force_basic_auth: true
+        status_code: 200
+        validate_certs: "{{ aap_validate_certs | default(omit) }}"
+      register: __aap_setup_inst_result
+      until: __aap_setup_inst_result.status == 200
+      retries: 90
+      delay: 10
+
+    - name: Debug __aap_setup_inst_result when debug is true, default false
+      ansible.builtin.debug:
+        var: __aap_setup_inst_result
+        verbosity: 2
+      when: debug | default(false)
+
+    - name: Create installer_completed file when installation succeeds
+      ansible.builtin.file:
+        path: "{{ aap_install_installer_dir }}/.install_complete"
+        state: touch
+        owner: "{{ aap_install_aap_user }}"
+        group: "{{ aap_install_aap_group }}"
+        mode: '0644'
+      register: file_install_complete
+
+    - name: Debug file_install_complete when debug is true, default false
+      ansible.builtin.debug:
+        var: file_install_complete
+        verbosity: 2
+      when: debug | default(false)
+
+    - name: Check to see if the file exists {{ aap_install_installer_dir }}/.install_complete
+      ansible.builtin.stat:
+        path: "{{ aap_install_installer_dir }}/.install_complete }}"
+        follow: true
+      register: install_complete
+
+    - name: Debug install_complete
+      ansible.builtin.debug:
+        var: install_complete
+      when: debug | default(false)
+
+- name: Add a subscription to the AAP host
+  when: aap_provision_redhat_subscription | default(false)
+  block:
+
+    - name: Upload the subscription manifest to the aap host
+      ansible.builtin.copy:
+        src: "{{ aap.license }}"
+        dest: "{{ aap_dir }}/aap-license.zip"
+        mode: '0644'
+      when: aap_provision_redhat_manifest | default(false)
+
+    - name: Use online subscription attachement
+      when: not aap_provision_redhat_manifest | default(false)
+      block:
+
+        - name: Use the subscriptions module to fetch subscriptions from Red Hat or Red Hat Satellite
+          ansible.controller.subscriptions:
+            controller_host: "{{ inventory_hostname }}"
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            username: "{{ aap_provision_redhat_username }}"
+            password: "{{ aap_provision_redhat_password }}"
+
+        - name: Install the subscription with a pool ID
+          ansible.controller.license:
+            controller_host: "{{ inventory_hostname }}"
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            pool_id: "{{ aap_provision_redhat_pool }}"
+
 ...
