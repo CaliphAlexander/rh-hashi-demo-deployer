@@ -72,6 +72,7 @@
         controller_password: "{{ aap_install_common_password }}"
         validate_certs: false
         inventory: "RH-Hashi"
+        variables: "{{ lookup('ansible.builtin.file', 'group_vars/all.yml') | from_yaml }}"
         children:
           - aap_hashi_aap
           - aap_hashi_gitlab
