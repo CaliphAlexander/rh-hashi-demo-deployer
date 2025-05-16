@@ -80,6 +80,23 @@
         line: "export DOCKER_HOST=unix:$XDG_RUNTIME_DIR/podman/podman.sock"
         insertafter: "EOF"
 
+    - name: Check stat of terraform_install_license_file
+      ansible.builtin.stat:
+        path: "{{ terraform_install_license_file }}"
+      register: tf_license_file
+
+    - name: Create terraform license file from variable when defined
+      ansible.builtin.copy:
+        content: "{{ terraform_install_license_content }}"
+        dest: "{{ terraform_home_dir }}/"
+        owner: "{{ terraform_user }}"
+        group: "{{ terraform_group }}"
+        mode: '0644'
+      when:
+        - terraform_install_license_content is defined
+        - not tf_license_file.stat.exists
+
+
     - name: Copy over terraform license file
       ansible.builtin.copy:
         src: "{{ terraform_install_license_file }}"
@@ -87,5 +104,8 @@
         owner: "{{ terraform_user }}"
         group: "{{ terraform_group }}"
         mode: '0644'
+      when:
+        - terraform_install_license_content is undefined
+        - tf_license_file.stat.exists
 
 ...

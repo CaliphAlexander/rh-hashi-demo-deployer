@@ -64,6 +64,11 @@
       when: item.key != "all" and item.key != "ungrouped" and item.key != "aap_hashi"
       loop: "{{ lookup('ansible.builtin.dict', groups) }}"
 
+    - name: Create group_vars_all fact with content from group_vars/all.yml file and content from terraform_install_license_file
+      ansible.builtin.set_fact:
+        group_vars_all: "{{ lookup('file', 'group_vars/all.yml') | from_yaml | combine({'terraform_install_license_content':
+          lookup('file', terraform_install_license_file)}) }}"
+
     - name: Add aap_hashi group from local inventory to controller with ansible.controller.group
       ansible.controller.group:
         name: "aap_hashi"
@@ -72,7 +77,8 @@
         controller_password: "{{ aap_install_common_password }}"
         validate_certs: false
         inventory: "RH-Hashi"
-        variables: "{{ lookup('ansible.builtin.file', 'group_vars/all.yml') | from_yaml }}"
+        # variables: "{{ lookup('ansible.builtin.file', 'group_vars/all.yml') | from_yaml | combine( {} )}}"
+        variables: "{{ group_vars_all }}"
         children:
           - aap_hashi_aap
           - aap_hashi_gitlab
@@ -115,6 +121,25 @@
         scm_type: git
         scm_url: https://github.com/ajacocks/rh-hashi-demo-deployer.git
         scm_branch: main
+
+    - name: Add job templates to execute RH-Hashi Demo Deployer host installs 
+      ansible.controller.job_template:
+        name: "RH-Hashi Demo - Install {{ item }}"
+        job_type: run
+        organization: RH-Hashi
+        inventory: RH-Hashi
+        project: RH-Hashi Demo Deployer
+        playbook: "{{ item }}"
+        credentials:
+          - RH-Hashi SSH Key
+        execution_environment: RH-Hashi
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+      loop:
+        - install-gitlab.yml
+        - install-terraform.yml
 
 
     # - name: Wait for automation hub to be running
