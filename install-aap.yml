@@ -64,10 +64,29 @@
       when: item.key != "all" and item.key != "ungrouped" and item.key != "aap_hashi"
       loop: "{{ lookup('ansible.builtin.dict', groups) }}"
 
+    - name: Find all local certs
+      ansible.builtin.find:
+        paths: "{{ local_certdir }}"
+        patterns: "*"
+      register: cert_files
+      delegate_to: localhost
+
+    - name: Debug cert_files
+      ansible.builtin.debug:
+        var: cert_files
+      when: debug | default(false)
+
+    - name: Loop over all local certificates in local_certdir and store them in facts
+      loop: "{{ cert_files.files }}"
+      register: certificates
+      delegate_to: localhost
+      ansible.builtin.set_fact:
+        controller_certs: "{{ controller_certs | default({}) | combine({item.path | basename: lookup('file', item.path)}) }}"
+
     - name: Create group_vars_all fact with content from group_vars/all.yml file and content from terraform_install_license_file
       ansible.builtin.set_fact:
         group_vars_all: "{{ lookup('file', 'group_vars/all.yml') | from_yaml | combine({'terraform_install_license_content':
-          lookup('file', terraform_install_license_file)}) }}"
+          lookup('file', terraform_install_license_file)}) | combine(controller_certs)}}"
 
     - name: Add aap_hashi group from local inventory to controller with ansible.controller.group
       ansible.controller.group:
