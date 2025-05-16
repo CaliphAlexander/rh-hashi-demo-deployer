@@ -88,14 +88,13 @@
     - name: Create terraform license file from variable when defined
       ansible.builtin.copy:
         content: "{{ terraform_install_license_content }}"
-        dest: "{{ terraform_home_dir }}/"
+        dest: "{{ terraform_home_dir }}/{{ terraform_install_license_file }}"
         owner: "{{ terraform_user }}"
         group: "{{ terraform_group }}"
         mode: '0644'
       when:
         - terraform_install_license_content is defined
         - not tf_license_file.stat.exists
-
 
     - name: Copy over terraform license file
       ansible.builtin.copy:
