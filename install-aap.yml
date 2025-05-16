@@ -79,6 +79,44 @@
           - aap_hashi_terraform
           - aap_hashi_vault
 
+    - name: Add RH-Hashi EE to the controller instance
+      ansible.controller.execution_environment:
+        name: "RH-Hashi"
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        organization: "RH-Hashi"
+        image: "{{ aap_hashi_demo_ee }}"
+
+    - name: Add Credential
+      ansible.controller.credential:
+        name: "RH-Hashi SSH Key"
+        credential_type: Machine
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        organization: "RH-Hashi"
+        inputs:
+          username: ec2-user
+          ssh_key_data: "{{ lookup('file', ec2_priv_keyfile) }}"
+
+    - name: Add project to deploy other environment hosts
+      ansible.controller.project:
+        name: RH-Hashi Demo Deployer 
+        state: present
+        wait: true
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        organization: RH-Hashi
+        scm_type: git
+        scm_url: https://github.com/ajacocks/rh-hashi-demo-deployer.git
+        scm_branch: main
+
+
     # - name: Wait for automation hub to be running
     #   ansible.builtin.uri: # use the first host from the list if no hostname is defined
     #     url: https://{{ ah_hostname }}:{{ __aap_setup_inst_hub_port }}/api/galaxy/

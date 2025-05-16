@@ -4,9 +4,6 @@
   hosts: localhost
   tags: infrastructure
 
-  vars:
-    ec2_priv_keyfile: "{{ playbook_dir }}/{{ ec2_priv_keyfile_name }}"
-
   tasks:
 
     - name: Check to see if terraform is in the path
