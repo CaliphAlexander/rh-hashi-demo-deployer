@@ -1,5 +1,22 @@
 ---
 
+- name: Create ssh key if needed
+  hosts: localhost
+
+  tasks:
+  
+    - name: Check to see if ec2/ssh pub key file exists
+      register: ec2_key_pub_file
+      ansible.builtin.stat:
+        path: "{{ ec2_priv_keyfile }}.pub"
+
+    - name: Create ec2_key.pub from variable when ec2_key_pub_file 
+      when: not ec2_key_pub_file.stat.exists and lookup('vars', ssh_key_name ~ '_pub' ) is defined
+      ansible.builtin.copy:
+        content: "{{ lookup('vars', ssh_key_name ~ '_pub' ) }}"
+        dest: "{{ ec2_priv_keyfile }}.pub"
+        mode: '0600'
+
 - name: Pull certs back from vault host
   hosts: "{{ groups['aap_hashi_vault'][0] }}"
 
