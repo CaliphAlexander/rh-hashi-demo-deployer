@@ -86,7 +86,7 @@
     - name: Create group_vars_all fact with content from group_vars/all.yml file and content from terraform_install_license_file
       ansible.builtin.set_fact:
         group_vars_all: "{{ lookup('file', 'group_vars/all.yml') | from_yaml | combine({'terraform_install_license_content':
-          lookup('file', terraform_install_license_file)}) | combine(controller_certs)}}"
+          lookup('file', terraform_install_license_file)}) | combine({'install_domain': install_domain}) }}"
 
     - name: Add aap_hashi group from local inventory to controller with ansible.controller.group
       ansible.controller.group:
