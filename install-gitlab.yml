@@ -1,17 +1,19 @@
 ---
 
 - name: Create ssh key if needed
-  hosts: localhost
+  hosts: "{{ groups['aap_hashi_gitlab'][0] }}"
 
   tasks:
   
     - name: Check to see if ec2/ssh pub key file exists
       register: ec2_key_pub_file
+      delegate_to: localhost
       ansible.builtin.stat:
         path: "{{ ec2_priv_keyfile }}.pub"
 
     - name: Create ec2_key.pub from variable when ec2_key_pub_file 
       when: not ec2_key_pub_file.stat.exists and lookup('vars', ssh_key_name ~ '_pub' ) is defined
+      delegate_to: localhost
       ansible.builtin.copy:
         content: "{{ lookup('vars', ssh_key_name ~ '_pub' ) }}"
         dest: "{{ ec2_priv_keyfile }}.pub"
