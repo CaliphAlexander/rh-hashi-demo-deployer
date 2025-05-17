@@ -1,5 +1,21 @@
 ---
 
+# terraform_install_license_content
+
+- name: Check stat for file terraform_install_license_file
+  ansible.builtin.stat:
+    path: "{{ terraform_install_license_file }}"
+  register: stat_result
+  delegate_to: localhost
+
+- name: Create the file terraform_install_license_file from the variable terraform_install_license_content when terraform_install_license_file doesn't exist
+  ansible.builtin.copy:
+    content: "{{ terraform_install_license_content }}"
+    dest: "{{ terraform_install_license_file }}"
+    mode: '0644'
+  when: not stat_result.stat.exists
+  delegate_to: localhost
+
 - name: Login to hashicorp registry
   containers.podman.podman_login:
     registry: images.releases.hashicorp.com
