@@ -1,5 +1,30 @@
 ---
 
+- name: Pull certs back from vault host
+  hosts: "{{ groups['aap_hashi_vault'][0] }}"
+
+  tasks:
+
+    - name: Find all certs
+      ansible.builtin.find:
+        paths: "{{ vault_terraform_certdir }}"
+        patterns: "*"
+      register: cert_files
+
+    - name: Make sure that the local_certdir directory exists
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ local_certdir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy certs back
+      ansible.builtin.fetch:
+        src: "{{ item.path }}"
+        dest: "{{ local_certdir }}/"
+        flat: true
+      loop: "{{ cert_files.files }}"
+
 - name: Provision Gitlab for AAP-HashiCorp integrated demo
   hosts: "{{ groups['aap_hashi_gitlab'][0] }}"
   tags: gitlab
