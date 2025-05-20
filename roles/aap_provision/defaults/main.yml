@@ -10,6 +10,7 @@ aap_provision_rhel_update: true
 # RHEL packages to install
 aap_provision_rhel_packages:
   - ansible-core
+  - podman
 
 # Local AAP service account for the containerized install
 aap_provision_aap_user: aap
