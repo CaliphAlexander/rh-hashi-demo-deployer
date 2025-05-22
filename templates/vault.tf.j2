@@ -223,3 +223,31 @@ output "vault_pki_secret_backend_cert_terraform_{{ install_domain | replace(".",
   value = vault_pki_secret_backend_cert.terraform_{{ install_domain | replace(".", "_") }}.private_key
   sensitive = true
 }
+
+#  vault write pki_int/issue/{{ install_domain | replace(".", "-") }} common_name="vault.{{ install_domain }}" ttl="24h"
+
+resource "vault_pki_secret_backend_cert" "vault_{{ install_domain | replace(".", "_") }}" {
+  issuer_ref  = vault_pki_secret_backend_issuer.intermediate.issuer_ref
+  backend     = vault_pki_secret_backend_role.intermediate_role.backend
+  name        = vault_pki_secret_backend_role.intermediate_role.name
+  common_name = "vault.{{ install_domain }}"
+  ttl         = 15480000
+  revoke      = true
+}
+
+output "vault_pki_secret_backend_cert_vault_{{ install_domain | replace(".", "_") }}_cert" {
+  value = vault_pki_secret_backend_cert.vault_{{ install_domain | replace(".", "_") }}.certificate
+}
+
+output "vault_pki_secret_backend_cert_vault_{{ install_domain | replace(".", "_") }}_serial_number" {
+  value = vault_pki_secret_backend_cert.vault_{{ install_domain | replace(".", "_") }}.serial_number
+}
+
+output "vault_pki_secret_backend_cert_vault_{{ install_domain | replace(".", "_") }}_ca_chain" {
+  value = vault_pki_secret_backend_cert.vault_{{ install_domain | replace(".", "_") }}.ca_chain
+}
+
+output "vault_pki_secret_backend_cert_vault_{{ install_domain | replace(".", "_") }}_private_key" {
+  value = vault_pki_secret_backend_cert.vault_{{ install_domain | replace(".", "_") }}.private_key
+  sensitive = true
+}

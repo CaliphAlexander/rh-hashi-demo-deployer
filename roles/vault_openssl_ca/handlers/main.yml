@@ -3,7 +3,7 @@
 
 - name: Update system ssl trust db
   ansible.builtin.command:
-    cmd: update-ca-trust
+    cmd: update-ca-trust extract
   become: true
 
 ...

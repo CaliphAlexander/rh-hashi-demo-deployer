@@ -20,8 +20,11 @@
 
   roles:
     - name: vault_provision
+      tags: vault_provision
     - name: vault_openssl_ca
+      tags: vault_openssl_ca
     - name: vault_install
+      tags: vault_install
 
   tasks:
 
@@ -191,6 +194,7 @@
       when: debug | default(false)
 
     - name: Write certificates and keys to files
+      tags: vault_export_certs
       block:
 
         - name: Copy intermediate cert to certdir
@@ -216,6 +220,7 @@
             - aap
             - gitlab
             - terraform
+            - vault
           register: chain_result
 
         - name: Write server certificates to files
@@ -227,6 +232,7 @@
             - aap
             - gitlab
             - terraform
+            - vault
           register: cert_result
 
         - name: Write server keys to files
@@ -238,6 +244,7 @@
             - aap
             - gitlab
             - terraform
+            - vault
           register: key_result
 
         - name: Write serial numbers to files
@@ -249,6 +256,7 @@
             - aap
             - gitlab
             - terraform
+            - vault
           register: serial_result
 
         - name: Find all certs
@@ -271,26 +279,175 @@
             flat: true
           loop: "{{ cert_files.files }}"
 
-    - name: Add SSL certs to system trusted anchors
-      become: true
+    # - name: Replace existing vault certificate with newly generated one
+    #   become: true
+    #   block:
+
+    #     - name: Check to see if /etc/vault.d/vault-cert.pem and vault-key.pem exist
+    #       ansible.builtin.stat:
+    #         path: "/etc/vault.d/{{ item }}"
+    #       loop:
+    #         - vault-cert.pem
+    #         - vault-key.pem
+    #       register: check_certs
+
+    #     - name: Check to see if /etc/vault.d/vault-cert.pem-self_signed and vault-key.pem-self_signed exist
+    #       ansible.builtin.stat:
+    #         path: "/etc/vault.d/{{ item }}-self_signed"
+    #       loop:
+    #         - vault-cert.pem
+    #         - vault-key.pem
+    #       register: check_certs_self
+
+    #     - name: Debug check_certs
+    #       ansible.builtin.debug:
+    #         var: check_certs
+    #       when: debug | default(false)
+
+    #     - name: Debug check_certs_self
+    #       ansible.builtin.debug:
+    #         var: check_certs_self
+    #       when: debug | default(false)
+
+    #     - name: Copy /etc/vault.d/vault-cert.pem and vault-key.pem to /etc/vault.d/vault-cert.pem-self_signed if /etc/vault.d/vault-cert.pem-self_signed does not exist
+    #       ansible.builtin.copy:
+    #         src: "/etc/vault.d/{{ item }}"
+    #         dest: "/etc/vault.d/{{ item }}-self_signed"
+    #         owner: vault
+    #         group: vault
+    #         mode: '0640'
+    #       loop:
+    #         - vault-cert.pem
+    #         - vault-key.pem
+    #       when: not check_certs_self.results[0].stat.exists and not check_certs_self.results[1].stat.exists
+
+    #     - name: Copy vault.{{ install_domain }}-ca_chain.crt and vault.{{ install_domain }}-server.key to /etc/vault.d/vault-cert.pem and /etc/vault.d/vault-key.pem
+    #       ansible.builtin.copy:
+    #         src: "{{ item.src }}"
+    #         dest: "/etc/vault.d/{{ item.dest }}"
+    #         owner: vault
+    #         group: vault
+    #         mode: '0640'
+    #       loop:
+    #         - src: vault.{{ install_domain }}-ca_chain.crt
+    #           dest: vault-cert.pem
+    #         - src: vault.{{ install_domain }}-server.key
+    #           dest: vault-key.pem
+    
+    - name: Get AWS access key id and secret access key with aws configure get
+      delegate_to: localhost
+      ansible.builtin.command:
+        cmd: aws configure get {{ item }}
+      loop:
+        - aws_access_key_id
+        - aws_secret_access_key
+      environment:
+        AWS_CONFIG_FILE: '{{ ansible_env.HOME }}/.aws/credentials'
+        AWS_PROFILE: "{{ aws_profile }}"
+      register: aws_credentials_result
+      changed_when: false
+
+    - name: Debug aws_credentials_result
+      ansible.builtin.debug:
+        var: aws_credentials_result
+      when: debug | default(false)
+
+    - name: Register aws_access_key_id and aws_secret_access_key from aws_credentials_result
+      ansible.builtin.set_fact:
+        aws_access_key_id: "{{ aws_credentials_result.results[0].stdout }}"
+        aws_secret_access_key: "{{ aws_credentials_result.results[1].stdout }}"
+
+    - name: Enable and configure KV secrets engine
       block:
 
-        - name: Copy ca cetificates to system trusted anchors
-          ansible.builtin.copy:
-            src: "{{ vault_terraform_certdir }}/{{ item }}"
-            dest: /etc/pki/ca-trust/source/anchors/root_2025-ca.pem
-            remote_src: true
-            owner: root
-            group: root
-            mode: '0644'
-          loop:
-            - root_2025-ca.crt
-            - intermediate.cert.pem
-          register: ssl_cert_install
+        - name: Check to see if kv engine is already present
+          ignore_errors: true
+          ansible.builtin.uri:
+            url: "{{ _vault_url }}/v1/sys/mounts"
+            validate_certs: false
+            method: GET
+            headers:
+              X-Vault-Token: "{{ root_token }}"
+            body_format: json
+            status_code:
+              - 200
+          register: vault_secrets_engines
 
-        - name: Update system ssl trust db
-          ansible.builtin.command:
-            cmd: update-ca-trust
-          when: ssl_cert_install.changed
+        - name: Debug vault_secrets_engines
+          ansible.builtin.debug:
+            var: vault_secrets_engines
+          when: debug | default(false)
+
+        - name: Create a new aap/ secrets engine if vault_secrets_engines.json.aap/ doesnt exist
+          ansible.builtin.uri:
+            url: '{{ _vault_url }}/v1/sys/mounts/aap'
+            validate_certs: false
+            method: POST
+            headers:
+              X-Vault-Token: "{{ root_token }}"
+            body_format: json
+            body:
+              type: kv
+              description: AAP Secrets Engine
+              path: secret/
+              options:
+                version: 1
+            status_code:
+              - 200
+              - 204
+          changed_when: true
+          when: "'aap/' not in vault_secrets_engines.json"
+          register: vault_aap_secrets
+
+        - name: Debug vault_aap_secrets
+          ansible.builtin.debug:
+            var: vault_aap_secrets
+          when: debug | default(false)
+
+        - name: Add aws secrets to aap secrets engine
+          ansible.builtin.uri:
+            url: '{{ _vault_url }}/v1/aap/data/aws'
+            validate_certs: false
+            method: POST
+            headers:
+              X-Vault-Token: "{{ root_token }}"
+            body_format: json
+            body:
+              data:
+                aws_access_key_id: "{{ aws_access_key_id }}"
+                aws_secret_access_key: "{{ aws_secret_access_key }}"
+            status_code:
+              - 200
+              - 204
+          changed_when: true
+          register: vault_aws_secrets_add
+
+        - name: Debug vault_aws_secrets_add
+          ansible.builtin.debug:
+            var: vault_aws_secrets_add
+          when: debug | default(false)
+
+        - name: Add red hat secrets to aap secrets engine
+          ansible.builtin.uri:
+            url: '{{ _vault_url }}/v1/aap/data/redhat'
+            validate_certs: false
+            method: POST
+            headers:
+              X-Vault-Token: "{{ root_token }}"
+            body_format: json
+            body:
+              data:
+                redhat_subscription_username: "{{ redhat_subscription_username }}"
+                redhat_subscription_password: "{{ redhat_subscription_password }}"
+            status_code:
+              - 200
+              - 204
+          changed_when: true
+          register: vault_rh_secrets_add
+
+        - name: Debug vault_rh_secrets_add
+          ansible.builtin.debug:
+            var: vault_rh_secrets_add
+          when: debug | default(false)
 
 ...

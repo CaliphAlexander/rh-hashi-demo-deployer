@@ -4,6 +4,8 @@
 # domain_name: CHANGEME.DOMAIN.NAME 
 ssh_key_name: ec2_key
 email_address: DEFAULT@DOMAIN.NAME # the email address used to send emails from the demo
+redhat_subscription_username: user@example.com
+redhat_subscription_password: CHANGEME
 
 # AWS information
 # this section is only used by deploy-hosts.yml for AWS deployment. Other deployments don't need it.
@@ -23,8 +25,8 @@ aws_demo_region: eu-west-1
 
 # Override these role variables to attach a RHEL subscription to the Vault RHEL server
 # vault_provision_redhat_subscription: true
-# vault_provision_redhat_username: user@example.com
-# vault_provision_redhat_password: CHANGEME
+# vault_provision_redhat_username: "{{ redhat_subscription_username }}"
+# vault_provision_redhat_password: "{{ redhat_subscription_password }}"
 
 # Override this role variable to point to your local Vault license file
 # vault_install_vault_license_file: /tmp/vault.hclic
@@ -44,8 +46,8 @@ vault_terraform_certdir: "{{ ansible_user_dir }}/terraform/certs"
 # Override these role variables to attach a RHEL subscription to the AAP RHEL server
 # aap_provision_redhat_subscription: false
 # aap_provision_redhat_subscription_manifest: false
-# aap_provision_redhat_username: user@example.com
-# aap_provision_redhat_password: CHANGEME
+# aap_provision_redhat_username: "{{ redhat_subscription_username }}"
+# aap_provision_redhat_password: "{{ redhat_subscription_password }}"
 # aap_provision_redhat_pool: CHANGEME
 
 # Change this to change the default password for AAP
@@ -64,8 +66,8 @@ aap_hashi_demo_ee: quay.io/ajacocks/hashi-demo-ee
 
 # Override these role variables to attach a RHEL subscription to the GitLab RHEL server
 # gitlab_provision_redhat_subscription: false
-# gitlab_provision_redhat_username: user@example.com
-# gitlab_provision_redhat_password: CHANGEME
+# gitlab_provision_redhat_username: "{{ redhat_subscription_username }}"
+# gitlab_provision_redhat_password: "{{ redhat_subscription_password }}"
 
 # Set the GitLab admin password here
 gitlab_install_password: CHANGEME
@@ -80,8 +82,8 @@ terraform_home_dir: /home/tfe
 
 # Override these role variables to attach a RHEL subscription to the Terraform RHEL server
 # terraform_provision_redhat_subscription: false
-# terraform_provision_redhat_username: user@example.com
-# terraform_provision_redhat_password: CHANGEME
+# terraform_provision_redhat_username: "{{ redhat_subscription_username }}"
+# terraform_provision_redhat_password: "{{ redhat_subscription_password }}"
 
 # Override this role variable to point to your local Terraform license file
 terraform_install_license_file: /tmp/terraform.hclic
