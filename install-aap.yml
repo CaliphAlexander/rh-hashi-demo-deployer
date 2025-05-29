@@ -17,8 +17,14 @@
   vars:
 
     ansible_user: "{{ aap_user }}"
+    _vault_url: https://{{ groups['aap_hashi_vault'][0] }}:{{ vault_install_api_port | default('8200') }}
 
   tasks:
+
+    - name: Set fact for vault root token delegated to localhost
+      delegate_to: localhost
+      ansible.builtin.set_fact:
+        _vault_root_token: "{{ lookup( 'ansible.builtin.file', local_certdir ~ '/rootkey' ) }}"
 
     - name: Add a new organization to controller
       ansible.platform.organization:
@@ -126,6 +132,20 @@
         inputs:
           username: ec2-user
           ssh_key_data: "{{ lookup('file', ec2_priv_keyfile) }}"
+
+    - name: Add vault secret Credential
+      ansible.controller.credential:
+        name: "RH-Hashi Vault"
+        credential_type: "HashiCorp Vault Secret Lookup"
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        organization: "RH-Hashi"
+        inputs:
+          url: "{{ _vault_url }}"
+          token: "{{ _vault_root_token }}"
+          api_version: "v1"
 
     - name: Add project to deploy other environment hosts
       ansible.controller.project:

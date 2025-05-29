@@ -15,7 +15,7 @@
 # you will need NFR or actual HashiCorp Vault and Terraform license keys
 ---
 - name: Provision vault for AAP-HashiCorp integrated demo
-  hosts: "{{ groups['aap_hashi_vault'] }}"
+  hosts: "{{ groups['aap_hashi_vault'][0] }}"
   tags: vault
 
   roles:
@@ -98,6 +98,20 @@
             content: "{{ vault_init_parsed.root_token }}"
             dest: "{{ vault_root_token_dir | default('/root/.vault') }}/rootkey"
             mode: '0600'
+
+    - name: Pull back data for unseal keys and root token
+      become: true
+      ansible.builtin.fetch:
+        src: "{{ item }}"
+        dest: "{{ local_certdir }}/"
+        flat: true
+      loop:
+        - "{{ vault_root_token_dir | default('/root/.vault') }}/rootkey"
+        - "{{ vault_unseal_key_dir | default('/root/.vault') }}/unseal_key_0"
+        - "{{ vault_unseal_key_dir | default('/root/.vault') }}/unseal_key_1"
+        - "{{ vault_unseal_key_dir | default('/root/.vault') }}/unseal_key_2"
+        - "{{ vault_unseal_key_dir | default('/root/.vault') }}/unseal_key_3"
+        - "{{ vault_unseal_key_dir | default('/root/.vault') }}/unseal_key_4"
 
     - name: Read keys from files
       become: true
@@ -279,61 +293,132 @@
             flat: true
           loop: "{{ cert_files.files }}"
 
-    # - name: Replace existing vault certificate with newly generated one
-    #   become: true
-    #   block:
-
-    #     - name: Check to see if /etc/vault.d/vault-cert.pem and vault-key.pem exist
-    #       ansible.builtin.stat:
-    #         path: "/etc/vault.d/{{ item }}"
-    #       loop:
-    #         - vault-cert.pem
-    #         - vault-key.pem
-    #       register: check_certs
-
-    #     - name: Check to see if /etc/vault.d/vault-cert.pem-self_signed and vault-key.pem-self_signed exist
-    #       ansible.builtin.stat:
-    #         path: "/etc/vault.d/{{ item }}-self_signed"
-    #       loop:
-    #         - vault-cert.pem
-    #         - vault-key.pem
-    #       register: check_certs_self
-
-    #     - name: Debug check_certs
-    #       ansible.builtin.debug:
-    #         var: check_certs
-    #       when: debug | default(false)
-
-    #     - name: Debug check_certs_self
-    #       ansible.builtin.debug:
-    #         var: check_certs_self
-    #       when: debug | default(false)
-
-    #     - name: Copy /etc/vault.d/vault-cert.pem and vault-key.pem to /etc/vault.d/vault-cert.pem-self_signed if /etc/vault.d/vault-cert.pem-self_signed does not exist
-    #       ansible.builtin.copy:
-    #         src: "/etc/vault.d/{{ item }}"
-    #         dest: "/etc/vault.d/{{ item }}-self_signed"
-    #         owner: vault
-    #         group: vault
-    #         mode: '0640'
-    #       loop:
-    #         - vault-cert.pem
-    #         - vault-key.pem
-    #       when: not check_certs_self.results[0].stat.exists and not check_certs_self.results[1].stat.exists
-
-    #     - name: Copy vault.{{ install_domain }}-ca_chain.crt and vault.{{ install_domain }}-server.key to /etc/vault.d/vault-cert.pem and /etc/vault.d/vault-key.pem
-    #       ansible.builtin.copy:
-    #         src: "{{ item.src }}"
-    #         dest: "/etc/vault.d/{{ item.dest }}"
-    #         owner: vault
-    #         group: vault
-    #         mode: '0640'
-    #       loop:
-    #         - src: vault.{{ install_domain }}-ca_chain.crt
-    #           dest: vault-cert.pem
-    #         - src: vault.{{ install_domain }}-server.key
-    #           dest: vault-key.pem
+    - name: Copy ca cetificates to system trusted anchors
+      become: true
+      ansible.builtin.copy:
+        src: "{{ local_certdir }}/{{ item }}"
+        dest: /etc/pki/ca-trust/source/anchors/root_2025-ca.pem
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - root_2025-ca.crt
+        - intermediate.cert.pem
+      register: certs_installed
     
+    - name: When certs_installed changed run update-ca-trust
+      ansible.builtin.command: update-ca-trust
+      become: true
+      when: certs_installed.changed
+
+    - name: Replace existing vault certificate with newly generated one
+      become: true
+      block:
+
+        - name: Check to see if /etc/vault.d/vault-cert.pem exists
+          ansible.builtin.stat:
+            path: "/etc/vault.d/vault-cert.pem"
+          register: check_cert
+
+        - name: Check to see if /etc/vault.d/vault-key.pem exists
+          ansible.builtin.stat:
+            path: "/etc/vault.d/vault-key.pem"
+          register: check_key
+
+        - name: Check to see if /etc/vault.d/vault-cert.pem-self_signed exists
+          ansible.builtin.stat:
+            path: "/etc/vault.d/vault-cert.pem-self_signed"
+          register: check_cert_self
+
+        - name: Check to see if vault-key.pem-self_signed exists
+          ansible.builtin.stat:
+            path: "/etc/vault.d/vault-key.pem-self_signed"
+          register: check_key_self
+
+        - name: Debug check_cert
+          ansible.builtin.debug:
+            msg:
+              - "{{ check_cert }}"
+              - "{{ check_cert_self }}"
+              - "{{ check_key }}"
+              - "{{ check_key_self }}"
+          when: debug | default(false)
+
+        - name: Copy /etc/vault.d/vault-cert.pem to /etc/vault.d/vault-cert.pem-self_signed if /etc/vault.d/vault-cert.pem-self_signed does not exist
+          ansible.builtin.copy:
+            src: /etc/vault.d/vault-cert.pem
+            dest: /etc/vault.d/vault-cert.pem-self_signed
+            remote_src: true
+            owner: vault
+            group: vault
+            mode: '0640'
+          when: check_cert.stat.exists and not check_cert_self.stat.exists
+
+        - name: Copy /etc/vault.d/vault-key.pem to /etc/vault.d/vault-key.pem-self_signed if /etc/vault.d/vault-key.pem-self_signed does not exist
+          ansible.builtin.copy:
+            src: /etc/vault.d/vault-key.pem
+            dest: /etc/vault.d/vault-key.pem-self_signed
+            remote_src: true
+            owner: vault
+            group: vault
+            mode: '0640'
+          when: check_key.stat.exists and not check_key_self.stat.exists
+
+        - name: Copy vault.{{ install_domain }}-server.crt and vault.{{ install_domain }}-server.key to /etc/vault.d/vault-cert.pem and /etc/vault.d/vault-key.pem
+          ansible.builtin.copy:
+            src: "{{ local_certdir }}/{{ item.src }}"
+            dest: "/etc/vault.d/{{ item.dest }}"
+            owner: vault
+            group: vault
+            mode: '0640'
+          loop:
+            - src: vault.{{ install_domain }}-server.crt
+              dest: vault-cert.pem
+            - src: vault.{{ install_domain }}-server.key
+              dest: vault-key.pem
+          register: cert_replace
+
+        - name: Restart vault when cert_replace.changed
+          ansible.builtin.systemd:
+            name: vault
+            state: restarted
+          when: cert_replace.changed
+
+        - name: Wait for vault to be listening again on port 8200
+          ansible.builtin.wait_for:
+            port: 8200
+            delay: 15
+          when: cert_replace.changed
+
+    - name: Unseal vault and login with root token
+      when: cert_replace.changed
+      block:
+        - name: Unseal vault via API with unseal keys
+          when: vault_status_parsed.sealed
+          ansible.builtin.uri:
+            url: "{{ _vault_url }}/v1/sys/unseal"
+            method: PUT
+            body_format: json
+            status_code: 200
+            body:
+              key: "{{ item }}"
+            validate_certs: "{{ vault_validate_certs | default(false) }}"
+          loop: "{{ unseal_keys_result.stdout_lines }}"
+          register: unseal_api_result
+
+        - name: Login and use the resulting token
+          community.hashi_vault.vault_login:
+            url: "{{ _vault_url }}"
+            auth_method: token
+            token: "{{ root_token }}"
+            validate_certs: "{{ vault_validate_certs | default(false) }}"
+          register: login_data
+
+        - name: Debug login data
+          ansible.builtin.debug:
+            var: login_data
+          when: debug | default(false)
+
     - name: Get AWS access key id and secret access key with aws configure get
       delegate_to: localhost
       ansible.builtin.command:
@@ -413,9 +498,8 @@
               X-Vault-Token: "{{ root_token }}"
             body_format: json
             body:
-              data:
-                aws_access_key_id: "{{ aws_access_key_id }}"
-                aws_secret_access_key: "{{ aws_secret_access_key }}"
+              aws_access_key_id: "{{ aws_access_key_id }}"
+              aws_secret_access_key: "{{ aws_secret_access_key }}"
             status_code:
               - 200
               - 204
@@ -436,9 +520,8 @@
               X-Vault-Token: "{{ root_token }}"
             body_format: json
             body:
-              data:
-                redhat_subscription_username: "{{ redhat_subscription_username }}"
-                redhat_subscription_password: "{{ redhat_subscription_password }}"
+              redhat_subscription_username: "{{ redhat_subscription_username }}"
+              redhat_subscription_password: "{{ redhat_subscription_password }}"
             status_code:
               - 200
               - 204

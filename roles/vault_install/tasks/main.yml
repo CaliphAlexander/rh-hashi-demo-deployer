@@ -58,8 +58,18 @@
             group: vault
             mode: '0640'
 
+    - name: Check to see if vault-cert.pem is present in /etc/vault.d
+      ansible.builtin.stat:
+        path: /etc/vault.d/vault-cert.pem
+      register: vault_cert_check
+
+    - name: Debug vault_cert_check when debug is set
+      ansible.builtin.debug:
+        var: vault_cert_check
+      when: debug | default(false)
+
     - name: Generate Vault self-signed certificate
-      when: not vault_install_tls_cert
+      when: not vault_install_tls_cert and not vault_cert_check.stat.exists
       block:
         - name: Generate an OpenSSL private key with the default values (4096 bits, RSA)
           community.crypto.openssl_privatekey:

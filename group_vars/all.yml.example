@@ -43,6 +43,9 @@ aws_demo_region: eu-west-1
 vault_terraform_dir: "{{ ansible_user_dir }}/terraform"
 vault_terraform_certdir: "{{ ansible_user_dir }}/terraform/certs"
 
+# API port for Vault
+vault_install_api_port: 8200
+
 # Override these role variables to attach a RHEL subscription to the AAP RHEL server
 # aap_provision_redhat_subscription: false
 # aap_provision_redhat_subscription_manifest: false
