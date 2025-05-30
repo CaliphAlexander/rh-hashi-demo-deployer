@@ -147,6 +147,42 @@
           token: "{{ _vault_root_token }}"
           api_version: "v1"
 
+    - name: Add aws access keys credential based on vault secret credential
+      ansible.controller.credential:
+        name: "RH-Hashi AWS"
+        credential_type: "Amazon Web Services"
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        organization: RH-Hashi
+
+    - name: Link RH-Hashi AWS credential to RH-Hashi Vault using credential_input_source for aws_access_key_id
+      ansible.controller.credential_input_source:
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        input_field_name: username
+        target_credential: RH-Hashi AWS
+        source_credential: RH-Hashi Vault
+        metadata:
+          secret_key: aws_access_key_id
+          secret_path: /aap/data/aws
+
+    - name: Link RH-Hashi AWS credential to RH-Hashi Vault using credential_input_source for aws_secret_access_key
+      ansible.controller.credential_input_source:
+        controller_host: https://{{ inventory_hostname }}
+        controller_username: admin
+        controller_password: "{{ aap_install_common_password }}"
+        validate_certs: false
+        input_field_name: password
+        target_credential: RH-Hashi AWS
+        source_credential: RH-Hashi Vault
+        metadata:
+          secret_key: aws_secret_access_key
+          secret_path: /aap/data/aws
+
     - name: Add project to deploy other environment hosts
       ansible.controller.project:
         name: RH-Hashi Demo Deployer 
