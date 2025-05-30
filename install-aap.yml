@@ -120,68 +120,207 @@
         organization: "RH-Hashi"
         image: "{{ aap_hashi_demo_ee }}"
 
-    - name: Add Credential
-      ansible.controller.credential:
-        name: "RH-Hashi SSH Key"
-        credential_type: Machine
-        controller_host: https://{{ inventory_hostname }}
-        controller_username: admin
-        controller_password: "{{ aap_install_common_password }}"
-        validate_certs: false
-        organization: "RH-Hashi"
-        inputs:
-          username: ec2-user
-          ssh_key_data: "{{ lookup('file', ec2_priv_keyfile) }}"
+    - name: Setup credentials
+      block:
 
-    - name: Add vault secret Credential
-      ansible.controller.credential:
-        name: "RH-Hashi Vault"
-        credential_type: "HashiCorp Vault Secret Lookup"
-        controller_host: https://{{ inventory_hostname }}
-        controller_username: admin
-        controller_password: "{{ aap_install_common_password }}"
-        validate_certs: false
-        organization: "RH-Hashi"
-        inputs:
-          url: "{{ _vault_url }}"
-          token: "{{ _vault_root_token }}"
-          api_version: "v1"
+        - name: Add custom credential type for aws access keys
+          ansible.controller.credential_type:
+            name: AWS Access Keys
+            kind: cloud
+            state: present
+            controller_host: https://{{ inventory_hostname }}
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            validate_certs: false
+            inputs:
+              fields:
+                - id: username
+                  type: string
+                  label: AWS Access Key ID
+                - id: password
+                  type: string
+                  label: AWS Secret Access Key
+                  secret: true
+              required:
+                - username
+                - password
+            injectors:
+              extra_vars:
+                aws_access_key_id: "{{ '{{' }} username {{ '}}' }}"
+                aws_secret_access_key: "{{ '{{' }} password {{ '}}' }}"
 
-    - name: Add aws access keys credential based on vault secret credential
-      ansible.controller.credential:
-        name: "RH-Hashi AWS"
-        credential_type: "Amazon Web Services"
-        controller_host: https://{{ inventory_hostname }}
-        controller_username: admin
-        controller_password: "{{ aap_install_common_password }}"
-        validate_certs: false
-        organization: RH-Hashi
+        - name: Add custom credential type for gitlab admin password
+          ansible.controller.credential_type:
+            name: GitLab Admin Password
+            kind: cloud
+            state: present
+            controller_host: https://{{ inventory_hostname }}
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            validate_certs: false
+            inputs:
+              fields:
+                - id: password
+                  type: string
+                  label: GitLab Install Password
+                  secret: true
+              required:
+                - password
+            injectors:
+              extra_vars:
+                gitlab_install_password: "{{ '{{' }} password {{ '}}' }}"
 
-    - name: Link RH-Hashi AWS credential to RH-Hashi Vault using credential_input_source for aws_access_key_id
-      ansible.controller.credential_input_source:
-        controller_host: https://{{ inventory_hostname }}
-        controller_username: admin
-        controller_password: "{{ aap_install_common_password }}"
-        validate_certs: false
-        input_field_name: username
-        target_credential: RH-Hashi AWS
-        source_credential: RH-Hashi Vault
-        metadata:
-          secret_key: aws_access_key_id
-          secret_path: /aap/data/aws
+        - name: Add custom credential type for terraform admin password
+          ansible.controller.credential_type:
+            name: Terraform Admin Password
+            kind: cloud
+            state: present
+            controller_host: https://{{ inventory_hostname }}
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            validate_certs: false
+            inputs:
+              fields:
+                - id: password
+                  type: string
+                  label: Terraform Install Password
+                  secret: true
+              required:
+                - password
+            injectors:
+              extra_vars:
+                terraform_install_common_password: "{{ '{{' }} password {{ '}}' }}"
 
-    - name: Link RH-Hashi AWS credential to RH-Hashi Vault using credential_input_source for aws_secret_access_key
-      ansible.controller.credential_input_source:
-        controller_host: https://{{ inventory_hostname }}
-        controller_username: admin
-        controller_password: "{{ aap_install_common_password }}"
-        validate_certs: false
-        input_field_name: password
-        target_credential: RH-Hashi AWS
-        source_credential: RH-Hashi Vault
-        metadata:
-          secret_key: aws_secret_access_key
-          secret_path: /aap/data/aws
+        - name: Add Credential
+          ansible.controller.credential:
+            name: "RH-Hashi SSH Key"
+            credential_type: Machine
+            controller_host: https://{{ inventory_hostname }}
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            validate_certs: false
+            organization: "RH-Hashi"
+            inputs:
+              username: ec2-user
+              ssh_key_data: "{{ lookup('file', ec2_priv_keyfile) }}"
+
+        - name: Setup vault credentials
+          block:
+
+            - name: Add vault secret Credential
+              ansible.controller.credential:
+                name: RH-Hashi Vault
+                credential_type: "HashiCorp Vault Secret Lookup"
+                controller_host: https://{{ inventory_hostname }}
+                controller_username: admin
+                controller_password: "{{ aap_install_common_password }}"
+                validate_certs: false
+                organization: "RH-Hashi"
+                inputs:
+                  url: "{{ _vault_url }}"
+                  token: "{{ _vault_root_token }}"
+                  api_version: "v1"
+
+            - name: Setup aws keys credential
+              block:
+
+                - name: Add aws access keys credential based on vault secret credential
+                  ansible.controller.credential:
+                    name: RH-Hashi AWS
+                    credential_type: AWS Access Keys
+                    controller_host: https://{{ inventory_hostname }}
+                    controller_username: admin
+                    controller_password: "{{ aap_install_common_password }}"
+                    validate_certs: false
+                    organization: RH-Hashi
+
+                - name: Link RH-Hashi AWS credential to RH-Hashi Vault using credential_input_source for aws_access_key_id
+                  ansible.controller.credential_input_source:
+                    controller_host: https://{{ inventory_hostname }}
+                    controller_username: admin
+                    controller_password: "{{ aap_install_common_password }}"
+                    validate_certs: false
+                    input_field_name: username
+                    target_credential: RH-Hashi AWS
+                    source_credential: RH-Hashi Vault
+                    metadata:
+                      secret_key: aws_access_key_id
+                      secret_path: /aap/data/aws
+
+                - name: Link RH-Hashi AWS credential to RH-Hashi Vault using credential_input_source for aws_secret_access_key
+                  ansible.controller.credential_input_source:
+                    controller_host: https://{{ inventory_hostname }}
+                    controller_username: admin
+                    controller_password: "{{ aap_install_common_password }}"
+                    validate_certs: false
+                    input_field_name: password
+                    target_credential: RH-Hashi AWS
+                    source_credential: RH-Hashi Vault
+                    metadata:
+                      secret_key: aws_secret_access_key
+                      secret_path: /aap/data/aws
+
+            - name: Setup passwords credentials
+              block:
+
+                - name: Add gitlab passwords credential based on vault secret credential
+                  ansible.controller.credential:
+                    name: RH-Hashi GitLab Password
+                    credential_type: GitLab Admin Password
+                    controller_host: https://{{ inventory_hostname }}
+                    controller_username: admin
+                    controller_password: "{{ aap_install_common_password }}"
+                    validate_certs: false
+                    organization: RH-Hashi
+
+                - name: Add terraform passwords credential based on vault secret credential
+                  ansible.controller.credential:
+                    name: RH-Hashi Terraform Password
+                    credential_type: Terraform Admin Password
+                    controller_host: https://{{ inventory_hostname }}
+                    controller_username: admin
+                    controller_password: "{{ aap_install_common_password }}"
+                    validate_certs: false
+                    organization: RH-Hashi
+
+                # - name: Link aap password to RH-Hashi Vault using credential_input_source for aws_access_key_id
+                #   ansible.controller.credential_input_source:
+                #     controller_host: https://{{ inventory_hostname }}
+                #     controller_username: admin
+                #     controller_password: "{{ aap_install_common_password }}"
+                #     validate_certs: false
+                #     input_field_name: password
+                #     target_credential: RH-Hashi GitLab Password
+                #     source_credential: RH-Hashi Vault
+                #     metadata:
+                #       secret_key: gitlab_install_password
+                #       secret_path: /aap/data/passwords
+
+                - name: Link gitlab password to RH-Hashi Vault using credential_input_source for aws_secret_access_key
+                  ansible.controller.credential_input_source:
+                    controller_host: https://{{ inventory_hostname }}
+                    controller_username: admin
+                    controller_password: "{{ aap_install_common_password }}"
+                    validate_certs: false
+                    input_field_name: password
+                    target_credential: RH-Hashi GitLab Password
+                    source_credential: RH-Hashi Vault
+                    metadata:
+                      secret_key: gitlab_install_password
+                      secret_path: /aap/data/passwords
+
+                - name: Link terraform password to RH-Hashi Vault using credential_input_source for aws_secret_access_key
+                  ansible.controller.credential_input_source:
+                    controller_host: https://{{ inventory_hostname }}
+                    controller_username: admin
+                    controller_password: "{{ aap_install_common_password }}"
+                    validate_certs: false
+                    input_field_name: password
+                    target_credential: RH-Hashi Terraform Password
+                    source_credential: RH-Hashi Vault
+                    metadata:
+                      secret_key: terraform_install_common_password
+                      secret_path: /aap/data/passwords
 
     - name: Add project to deploy other environment hosts
       ansible.controller.project:

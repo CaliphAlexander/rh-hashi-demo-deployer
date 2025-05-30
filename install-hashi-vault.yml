@@ -533,4 +533,27 @@
             var: vault_rh_secrets_add
           when: debug | default(false)
 
+        - name: Add password secrets to aap secrets engine
+          ansible.builtin.uri:
+            url: '{{ _vault_url }}/v1/aap/data/passwords'
+            validate_certs: false
+            method: POST
+            headers:
+              X-Vault-Token: "{{ root_token }}"
+            body_format: json
+            body:
+              gitlab_install_password: "{{ gitlab_install_password }}"
+              terraform_install_common_password: "{{ terraform_install_common_password }}"
+
+            status_code:
+              - 200
+              - 204
+          changed_when: true
+          register: vault_pw_secrets_add
+
+        - name: Debug vault_pw_secrets_add
+          ansible.builtin.debug:
+            var: vault_pw_secrets_add
+          when: debug | default(false)
+
 ...
