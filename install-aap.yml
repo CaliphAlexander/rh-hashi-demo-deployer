@@ -322,38 +322,58 @@
                       secret_key: terraform_install_common_password
                       secret_path: /aap/data/passwords
 
-    - name: Add project to deploy other environment hosts
-      ansible.controller.project:
-        name: RH-Hashi Demo Deployer 
-        state: present
-        wait: true
-        controller_host: https://{{ inventory_hostname }}
-        controller_username: admin
-        controller_password: "{{ aap_install_common_password }}"
-        validate_certs: false
-        organization: RH-Hashi
-        scm_type: git
-        scm_url: https://github.com/ajacocks/rh-hashi-demo-deployer.git
-        scm_branch: main
+    - name: Setup projects
+      block:
 
-    - name: Add job templates to execute RH-Hashi Demo Deployer host installs 
-      ansible.controller.job_template:
-        name: "RH-Hashi Demo - Install {{ item }}"
-        job_type: run
-        organization: RH-Hashi
-        inventory: RH-Hashi
-        project: RH-Hashi Demo Deployer
-        playbook: "{{ item }}"
-        credentials:
-          - RH-Hashi SSH Key
-        execution_environment: RH-Hashi
-        controller_host: https://{{ inventory_hostname }}
-        controller_username: admin
-        controller_password: "{{ aap_install_common_password }}"
-        validate_certs: false
-      loop:
-        - install-gitlab.yml
-        - install-terraform.yml
+        - name: Add project to deploy other environment hosts
+          ansible.controller.project:
+            name: RH-Hashi Demo Deployer 
+            state: present
+            wait: true
+            controller_host: https://{{ inventory_hostname }}
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            validate_certs: false
+            organization: RH-Hashi
+            scm_type: git
+            scm_url: https://github.com/ajacocks/rh-hashi-demo-deployer.git
+            scm_branch: main
+
+        - name: Add project to deploy demo content hosts
+          ansible.controller.project:
+            name: RH-Hashi Demo Content 
+            state: present
+            wait: true
+            controller_host: https://{{ inventory_hostname }}
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            validate_certs: false
+            organization: RH-Hashi
+            scm_type: git
+            scm_url: https://github.com/ajacocks/rh-hashi-demo-content.git
+            scm_branch: main
+
+    - name: Setup job templates
+      block:
+
+        - name: Add job templates to execute RH-Hashi Demo Deployer host installs 
+          ansible.controller.job_template:
+            name: "RH-Hashi Demo - Install {{ item }}"
+            job_type: run
+            organization: RH-Hashi
+            inventory: RH-Hashi
+            project: RH-Hashi Demo Deployer
+            playbook: "{{ item }}"
+            credentials:
+              - RH-Hashi SSH Key
+            execution_environment: RH-Hashi
+            controller_host: https://{{ inventory_hostname }}
+            controller_username: admin
+            controller_password: "{{ aap_install_common_password }}"
+            validate_certs: false
+          loop:
+            - install-gitlab.yml
+            - install-terraform.yml
 
 
     # - name: Wait for automation hub to be running
