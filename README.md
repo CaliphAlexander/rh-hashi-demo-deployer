@@ -30,7 +30,11 @@ The purpose of this environment and deployer is to demonstrate the fully config-
 7. Click on `Automation Execution` and then `Templates`.
 8. Click on the rocketship icon to the right of `RH-Hashi Demo - Install install-gitlab.yml`, and monitor the installation for success.
    1. AAP will now install and configure GitLab Community Edition, and return success or failure.
-9. 
+9. Click on the rocketship icon to the right of `RH-Hashi Demo - Install install-terraform.yml`, and monitor the installation for success.
+
+With that, the environment is up and running.
+
+## Other Resources
 
 - [Ansible Automation Platform Self-Paced Labs
 ](https://red.ht/ansible-labs) - These interactive learning scenarios provide you with a pre-configured Ansible Automation Platform environment to experiment, learn, and see how the platform can help you solve real-world problems. The environment runs entirely in your browser, enabling you to learn more about our technology at your pace and time.
