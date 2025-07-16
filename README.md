@@ -8,7 +8,7 @@ This repository contains the Ansible and Terraform based deployer for an enterpr
   - on RHEL 9
 - HashiCorp Terraform Enterprise
   - Containerized installation on Podman, on RHEL 9
-- GitLab CE
+- GitLab Community Edition (CE)
 
 ## Purpose
 
